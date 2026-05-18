@@ -150,13 +150,13 @@ Both vim-style and arrow keys work where applicable.
 | List | `enter` | Open selected chat (full-screen reading mode) |
 | List | `a` | Open account filter overlay |
 | List | `/` | Open search (placeholder in v1; full implementation in v1.1) |
-| List | `q` | Quit |
+| List | `q` | Show quit confirmation overlay (y to quit, n/Esc to dismiss) |
 | List | `?` | Show help overlay |
 | Reading | `j` / `↓` | Scroll messages down |
 | Reading | `k` / `↑` | Scroll messages up |
 | Reading | `g` / `G` | Jump to top / bottom |
 | Reading | `esc` | Back to triage view |
-| Reading | `q` | Quit |
+| Reading | `q` | Show quit confirmation overlay |
 | Overlay | `j/k` `↑/↓` | Navigate options |
 | Overlay | `enter` | Select |
 | Overlay | `esc` | Dismiss overlay |
@@ -164,7 +164,7 @@ Both vim-style and arrow keys work where applicable.
 ### Modes are explicit and few
 - **Triage** (the default two-pane view)
 - **Reading** (full-screen chat)
-- **Overlay** (account filter, help, future search) — overlays modal-dismiss to whatever mode launched them
+- **Overlay** (account filter, help, quit confirm, future search) — overlays modal-dismiss to whatever mode launched them
 
 Search is deferred to a later milestone within v1 (or v1.1). The `/` key reserves the binding and shows a "coming soon" placeholder so users don't form a different muscle memory and have to relearn.
 
@@ -288,7 +288,7 @@ These will firm up during implementation; the spec doesn't pin every field.
 Every retry is either explicit (user presses `r`) or visible (status bar / banner shows we're reconnecting). The TUI never hides connection trouble from the user.
 
 ### Graceful shutdown
-On `q`, SIGINT, or SIGTERM: flush cache, close WS, exit 0. We never leave a half-written cache file.
+On `q`: show a confirm-on-quit overlay ("Quit? (y/n)"); `y` proceeds with shutdown, `n` or `Esc` dismisses. On confirmed quit, SIGINT, or SIGTERM: flush cache, close WS, exit 0. We never leave a half-written cache file.
 
 ## 7. Configuration and persistence
 
