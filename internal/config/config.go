@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const appName = "beeper-tui"
@@ -21,4 +22,8 @@ func XDGCacheDir() (string, error) {
 		return "", err
 	}
 	return filepath.Join(base, appName), nil
+}
+
+func Token() string {
+	return strings.TrimSpace(os.Getenv("BEEPER_ACCESS_TOKEN"))
 }
