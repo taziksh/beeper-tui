@@ -35,6 +35,10 @@ Attachments (view + send), reactions, replies, threads, edits, deletes.
 
 ## 2. Backend choice and connection model
 
+### v1 scope refinement (2026-05-18)
+
+After Phase 1 shipped and the Beeper Go SDK was inspected, the WebSocket client (T2 in bd) was **deferred to v1.x**. Reasoning: the official Go SDK has no WebSocket support, so building it requires a custom WS layer over `gorilla/websocket` or similar — roughly doubling Phase 2's scope. v1 still ships read-only triage; users see their full chat list and message history but won't see new messages appear live until v1.x adds WS. See bd issues `beeper-tui-qbg.5` (WS client, deferred) and `beeper-tui-qbg.12` (new-message handler, deferred with WS).
+
 ### Why the local Beeper Desktop API (not direct Matrix)
 The Beeper Desktop app exposes a local REST + WebSocket API on `http://127.0.0.1:23373` when enabled in Settings → Developers (Beeper Desktop v4.1.169+). Using it means:
 - Beeper Desktop handles authentication, end-to-end encryption, bridge wrangling
