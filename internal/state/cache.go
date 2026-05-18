@@ -3,11 +3,14 @@ package state
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"time"
 )
 
 const CurrentSchemaVersion = 1
+
+var ErrCorruptCache = errors.New("state: cache file is corrupt")
 
 type Cache struct {
 	SchemaVersion      int            `json:"schema_version"`
@@ -43,7 +46,7 @@ func Load(path string) (Cache, error) {
 	}
 	var c Cache
 	if err := json.Unmarshal(raw, &c); err != nil {
-		return Cache{}, err
+		return Cache{}, fmt.Errorf("%w: %v", ErrCorruptCache, err)
 	}
 	return c, nil
 }

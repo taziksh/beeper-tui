@@ -2,6 +2,7 @@ package state_test
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -92,5 +93,18 @@ func TestLoad_MissingFileReturnsEmptyCacheNoError(t *testing.T) {
 	}
 	if got.SchemaVersion != 0 {
 		t.Errorf("SchemaVersion = %d, want 0 for missing file", got.SchemaVersion)
+	}
+}
+
+func TestLoad_CorruptJSONReturnsSentinel(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cache.json")
+	if err := os.WriteFile(path, []byte("not json at all"), 0o600); err != nil {
+		t.Fatalf("setup WriteFile() error = %v", err)
+	}
+
+	_, err := state.Load(path)
+	if !errors.Is(err, state.ErrCorruptCache) {
+		t.Errorf("Load() error = %v, want errors.Is(err, ErrCorruptCache)", err)
 	}
 }
