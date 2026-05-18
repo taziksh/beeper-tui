@@ -11,6 +11,7 @@ import (
 const CurrentSchemaVersion = 1
 
 var ErrCorruptCache = errors.New("state: cache file is corrupt")
+var ErrSchemaMismatch = errors.New("state: cache schema version does not match current")
 
 type Cache struct {
 	SchemaVersion      int            `json:"schema_version"`
@@ -47,6 +48,10 @@ func Load(path string) (Cache, error) {
 	var c Cache
 	if err := json.Unmarshal(raw, &c); err != nil {
 		return Cache{}, fmt.Errorf("%w: %v", ErrCorruptCache, err)
+	}
+	if c.SchemaVersion != CurrentSchemaVersion {
+		return Cache{}, fmt.Errorf("%w: file has %d, expected %d",
+			ErrSchemaMismatch, c.SchemaVersion, CurrentSchemaVersion)
 	}
 	return c, nil
 }

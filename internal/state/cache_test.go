@@ -108,3 +108,18 @@ func TestLoad_CorruptJSONReturnsSentinel(t *testing.T) {
 		t.Errorf("Load() error = %v, want errors.Is(err, ErrCorruptCache)", err)
 	}
 }
+
+func TestLoad_SchemaMismatchReturnsSentinel(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cache.json")
+	// Write a valid JSON cache with a future schema version.
+	body := []byte(`{"schema_version": 999, "last_selected_chat_id": "x", "chats": []}`)
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		t.Fatalf("setup WriteFile() error = %v", err)
+	}
+
+	_, err := state.Load(path)
+	if !errors.Is(err, state.ErrSchemaMismatch) {
+		t.Errorf("Load() error = %v, want errors.Is(err, ErrSchemaMismatch)", err)
+	}
+}
