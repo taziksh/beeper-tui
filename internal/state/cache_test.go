@@ -52,3 +52,32 @@ func TestSave_WritesValidJSON(t *testing.T) {
 		t.Errorf("Chats[0].Name = %q, want %q", decoded.Chats[0].Name, "Sarah Kim")
 	}
 }
+
+func TestLoad_RoundTripsSave(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cache.json")
+
+	original := state.Cache{
+		LastSelectedChatID: "abc",
+		Chats: []state.ChatSnapshot{
+			{ID: "abc", Name: "Test Chat", Account: "Signal", Unread: 1},
+		},
+	}
+	if err := state.Save(path, original); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	got, err := state.Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got.LastSelectedChatID != "abc" {
+		t.Errorf("LastSelectedChatID = %q, want %q", got.LastSelectedChatID, "abc")
+	}
+	if len(got.Chats) != 1 || got.Chats[0].Name != "Test Chat" {
+		t.Errorf("Chats = %+v, want one chat named Test Chat", got.Chats)
+	}
+	if got.SchemaVersion != state.CurrentSchemaVersion {
+		t.Errorf("SchemaVersion = %d, want %d", got.SchemaVersion, state.CurrentSchemaVersion)
+	}
+}

@@ -31,3 +31,15 @@ func Save(path string, c Cache) error {
 	}
 	return os.WriteFile(path, b, 0o600)
 }
+
+func Load(path string) (Cache, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return Cache{}, err
+	}
+	var c Cache
+	if err := json.Unmarshal(raw, &c); err != nil {
+		return Cache{}, err
+	}
+	return c, nil
+}
