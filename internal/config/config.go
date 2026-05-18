@@ -14,3 +14,11 @@ func XDGConfigDir() (string, error) {
 	}
 	return filepath.Join(base, appName), nil
 }
+
+func XDGCacheDir() (string, error) {
+	base, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(base, appName), nil
+}
