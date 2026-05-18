@@ -47,3 +47,17 @@ func TestToken_ReadsEnvVar(t *testing.T) {
 		})
 	}
 }
+
+func TestBaseURL_DefaultsToLocalhost(t *testing.T) {
+	t.Setenv("BEEPER_API_BASE_URL", "")
+	if got, want := config.BaseURL(), "http://127.0.0.1:23373"; got != want {
+		t.Errorf("BaseURL() = %q, want %q", got, want)
+	}
+}
+
+func TestBaseURL_HonorsEnvOverride(t *testing.T) {
+	t.Setenv("BEEPER_API_BASE_URL", "http://192.168.1.10:9999")
+	if got, want := config.BaseURL(), "http://192.168.1.10:9999"; got != want {
+		t.Errorf("BaseURL() = %q, want %q", got, want)
+	}
+}
