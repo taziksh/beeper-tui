@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "server",
+  "dolt_database": "beeper_tui",
+  "project_id": "4a2f9ce2-7ab9-49f1-bdec-9017476f69cc"
+}
