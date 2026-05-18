@@ -36,3 +36,27 @@ func BaseURL() string {
 	}
 	return defaultBaseURL
 }
+
+type Config struct {
+	Token     string
+	BaseURL   string
+	ConfigDir string
+	CacheDir  string
+}
+
+func Load() (Config, error) {
+	cfgDir, err := XDGConfigDir()
+	if err != nil {
+		return Config{}, err
+	}
+	cacheDir, err := XDGCacheDir()
+	if err != nil {
+		return Config{}, err
+	}
+	return Config{
+		Token:     Token(),
+		BaseURL:   BaseURL(),
+		ConfigDir: cfgDir,
+		CacheDir:  cacheDir,
+	}, nil
+}

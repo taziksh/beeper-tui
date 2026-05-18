@@ -61,3 +61,25 @@ func TestBaseURL_HonorsEnvOverride(t *testing.T) {
 		t.Errorf("BaseURL() = %q, want %q", got, want)
 	}
 }
+
+func TestLoad_AssemblesAllFields(t *testing.T) {
+	t.Setenv("BEEPER_ACCESS_TOKEN", "tok")
+	t.Setenv("BEEPER_API_BASE_URL", "http://x.test")
+
+	got, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got.Token != "tok" {
+		t.Errorf("Token = %q, want %q", got.Token, "tok")
+	}
+	if got.BaseURL != "http://x.test" {
+		t.Errorf("BaseURL = %q, want %q", got.BaseURL, "http://x.test")
+	}
+	if got.ConfigDir == "" {
+		t.Error("ConfigDir is empty")
+	}
+	if got.CacheDir == "" {
+		t.Error("CacheDir is empty")
+	}
+}
