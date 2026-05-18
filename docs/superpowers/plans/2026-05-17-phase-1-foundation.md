@@ -257,7 +257,7 @@ git commit -m "docs: add README skeleton"
 
 Run:
 ```bash
-bd close beeper-tui-qbg.1 --notes "Scaffolding complete: Go module, main.go stub, LICENSE, README. See commits for details."
+bd close beeper-tui-qbg.1 --reason "Scaffolding complete: Go module, main.go stub, LICENSE, README. See commits for details."
 ```
 
 Expected: closure confirmation.
@@ -1273,7 +1273,7 @@ git commit -m "feat(main): load cache and report status on startup"
 
 Run:
 ```bash
-bd close beeper-tui-qbg.3 --notes "Cache layer complete: Cache struct, Save, Load with sentinels for missing/corrupt/schema-mismatch. Wired into main.go."
+bd close beeper-tui-qbg.3 --reason "Cache layer complete: Cache struct, Save, Load with sentinels for missing/corrupt/schema-mismatch. Wired into main.go."
 ```
 
 - [ ] **Step 2: Verify**
