@@ -2,6 +2,7 @@ package state
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"time"
 )
@@ -35,6 +36,9 @@ func Save(path string, c Cache) error {
 func Load(path string) (Cache, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return Cache{}, nil
+		}
 		return Cache{}, err
 	}
 	var c Cache

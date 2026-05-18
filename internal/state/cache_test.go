@@ -81,3 +81,16 @@ func TestLoad_RoundTripsSave(t *testing.T) {
 		t.Errorf("SchemaVersion = %d, want %d", got.SchemaVersion, state.CurrentSchemaVersion)
 	}
 }
+
+func TestLoad_MissingFileReturnsEmptyCacheNoError(t *testing.T) {
+	got, err := state.Load(filepath.Join(t.TempDir(), "does-not-exist.json"))
+	if err != nil {
+		t.Fatalf("Load() error = %v, want nil for missing file", err)
+	}
+	if len(got.Chats) != 0 {
+		t.Errorf("Chats = %+v, want empty", got.Chats)
+	}
+	if got.SchemaVersion != 0 {
+		t.Errorf("SchemaVersion = %d, want 0 for missing file", got.SchemaVersion)
+	}
+}
