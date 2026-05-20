@@ -20,7 +20,7 @@ func TestListMessages_MapsMessages(t *testing.T) {
 		_, _ = w.Write([]byte(messagesJSON))
 	})
 
-	msgs, err := client.ListMessages(context.Background(), "chat-1", 50)
+	msgs, err := client.ListMessages(context.Background(), "chat-1")
 	if err != nil {
 		t.Fatalf("ListMessages() error = %v", err)
 	}

@@ -8,10 +8,8 @@ import (
 	"github.com/beeper/desktop-api-go/v5/shared"
 )
 
-// ListMessages fetches up to `limit` recent messages in a chat.
-// Note: the SDK's MessageListParams does not expose a Limit field; the limit
-// parameter is accepted for API compatibility but is not forwarded to the SDK.
-func (c *Client) ListMessages(ctx context.Context, chatID string, limit int) ([]Message, error) {
+// ListMessages fetches recent messages in a chat.
+func (c *Client) ListMessages(ctx context.Context, chatID string) ([]Message, error) {
 	page, err := c.sdk.Messages.List(ctx, chatID, beeperdesktopapi.MessageListParams{})
 	if err != nil {
 		return nil, fmt.Errorf("api: list messages for %s: %w", chatID, err)
