@@ -103,3 +103,15 @@ func TestListChats_FollowsPagination(t *testing.T) {
 		t.Errorf("got IDs %q,%q want a,b", chats[0].ID, chats[1].ID)
 	}
 }
+
+func TestListChats_PropagatesAuthError(t *testing.T) {
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
+	})
+
+	_, err := client.ListChats(context.Background())
+	if err == nil {
+		t.Fatal("ListChats() error = nil, want non-nil on 401")
+	}
+}
