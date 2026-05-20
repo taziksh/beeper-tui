@@ -69,4 +69,37 @@ func TestListChats_MapsSinglePage(t *testing.T) {
 	if chats[0].LastActive.IsZero() {
 		t.Error("chats[0].LastActive is zero, want parsed timestamp")
 	}
+	if chats[0].ID != "chat-1" {
+		t.Errorf("chats[0].ID = %q, want chat-1", chats[0].ID)
+	}
+	if chats[0].Type != "group" {
+		t.Errorf("chats[0].Type = %q, want group", chats[0].Type)
+	}
+}
+
+func TestListChats_FollowsPagination(t *testing.T) {
+	page1 := `{"items":[{"id":"a","network":"Signal","title":"A","type":"single","unreadCount":0,"lastActivity":"2026-05-19T12:00:00Z","preview":{"id":"p1","accountID":"x","chatID":"a","senderID":"s","sortKey":"1","timestamp":"2026-05-19T12:00:00Z","text":""}}],"hasMore":true,"newestCursor":"cur1","oldestCursor":"old1"}`
+	page2 := `{"items":[{"id":"b","network":"Signal","title":"B","type":"single","unreadCount":0,"lastActivity":"2026-05-18T12:00:00Z","preview":{"id":"p2","accountID":"x","chatID":"b","senderID":"s","sortKey":"2","timestamp":"2026-05-18T12:00:00Z","text":""}}],"hasMore":false,"newestCursor":"cur2","oldestCursor":"old2"}`
+
+	var calls int
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if calls == 0 {
+			_, _ = w.Write([]byte(page1))
+		} else {
+			_, _ = w.Write([]byte(page2))
+		}
+		calls++
+	})
+
+	chats, err := client.ListChats(context.Background())
+	if err != nil {
+		t.Fatalf("ListChats() error = %v", err)
+	}
+	if len(chats) != 2 {
+		t.Fatalf("got %d chats across pages, want 2 (calls=%d)", len(chats), calls)
+	}
+	if chats[0].ID != "a" || chats[1].ID != "b" {
+		t.Errorf("got IDs %q,%q want a,b", chats[0].ID, chats[1].ID)
+	}
 }

@@ -7,16 +7,15 @@ import (
 	beeperdesktopapi "github.com/beeper/desktop-api-go/v5"
 )
 
-// ListChats fetches the first page of chats and returns them as domain Chats.
-// (Pagination across all pages is added in the next task.)
+// ListChats fetches all pages of chats and returns them as domain Chats.
 func (c *Client) ListChats(ctx context.Context) ([]Chat, error) {
-	page, err := c.sdk.Chats.List(ctx, beeperdesktopapi.ChatListParams{})
-	if err != nil {
-		return nil, fmt.Errorf("api: list chats: %w", err)
+	iter := c.sdk.Chats.ListAutoPaging(ctx, beeperdesktopapi.ChatListParams{})
+	var out []Chat
+	for iter.Next() {
+		out = append(out, mapChat(iter.Current()))
 	}
-	out := make([]Chat, 0, len(page.Items))
-	for _, item := range page.Items {
-		out = append(out, mapChat(item))
+	if err := iter.Err(); err != nil {
+		return nil, fmt.Errorf("api: list chats: %w", err)
 	}
 	return out, nil
 }
