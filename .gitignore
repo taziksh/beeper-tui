@@ -9,3 +9,6 @@
 
 # Built binary (use `go install` or `go build -o` for distribution)
 /beeper-tui
+
+# Stray clone of the beads tool source (not part of this project)
+/beads/
