@@ -1,16 +1,19 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/taziksh/beeper-tui/internal/api"
 	"github.com/taziksh/beeper-tui/internal/config"
 	"github.com/taziksh/beeper-tui/internal/state"
 )
 
-const version = "0.0.0-phase-1"
+const version = "0.0.0-phase-2"
 
 func main() {
 	fmt.Printf("beeper-tui %s\n", version)
@@ -21,27 +24,34 @@ func main() {
 		os.Exit(1)
 	}
 
-	tokenStatus := "not set"
-	if cfg.Token != "" {
-		tokenStatus = "set"
+	if cfg.Token == "" {
+		fmt.Fprintln(os.Stderr, "No BEEPER_ACCESS_TOKEN set. Enable the Desktop API in Beeper (Settings -> Developers -> Approved connections) and export a token.")
+		os.Exit(1)
 	}
 
-	fmt.Printf("  api base url: %s\n", cfg.BaseURL)
-	fmt.Printf("  config dir:   %s\n", cfg.ConfigDir)
-	fmt.Printf("  cache dir:    %s\n", cfg.CacheDir)
-	fmt.Printf("  token:        %s\n", tokenStatus)
-
 	cachePath := filepath.Join(cfg.CacheDir, "cache.json")
-	cache, err := state.Load(cachePath)
-	switch {
-	case err == nil:
-		fmt.Printf("  cache:        loaded %d chats\n", len(cache.Chats))
-	case errors.Is(err, state.ErrCorruptCache):
-		fmt.Printf("  cache:        corrupt, starting fresh\n")
-	case errors.Is(err, state.ErrSchemaMismatch):
-		fmt.Printf("  cache:        schema mismatch, starting fresh\n")
-	default:
+	if cache, err := state.Load(cachePath); err == nil {
+		fmt.Printf("  cache: %d chats (warm)\n", len(cache.Chats))
+	} else if !errors.Is(err, state.ErrCorruptCache) && !errors.Is(err, state.ErrSchemaMismatch) {
 		fmt.Fprintf(os.Stderr, "cache: %v\n", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	client := api.New(cfg)
+	chats, err := client.ListChats(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fetch chats: %v\n", err)
 		os.Exit(1)
+	}
+
+	fmt.Printf("\n%d chats:\n", len(chats))
+	for _, ch := range chats {
+		marker := " "
+		if ch.Unread > 0 {
+			marker = "*"
+		}
+		fmt.Printf("  %s [%-10s] %3d  %s\n", marker, ch.Network, ch.Unread, ch.Title)
 	}
 }
