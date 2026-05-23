@@ -51,6 +51,24 @@ func TestUpdate_Error(t *testing.T) {
 	}
 }
 
+func TestUpdate_SendResultError_MarksFailed(t *testing.T) {
+	m := Model{failedSends: map[string]bool{}}
+	got, _ := m.Update(sendResultMsg{localID: "local:1", err: errors.New("network down")})
+	gm := got.(Model)
+	if !gm.failedSends["local:1"] {
+		t.Error("failedSends[local:1] should be true after an errored send")
+	}
+}
+
+func TestUpdate_SendResultSuccess_NotMarked(t *testing.T) {
+	m := Model{failedSends: map[string]bool{}}
+	got, _ := m.Update(sendResultMsg{localID: "local:1", err: nil})
+	gm := got.(Model)
+	if gm.failedSends["local:1"] {
+		t.Error("a successful send must not be marked failed")
+	}
+}
+
 func TestUpdate_WindowSizeReclamps(t *testing.T) {
 	m := Model{mode: ModeConversation, messages: msgs(50), msgOffset: 40, height: 30}
 	got, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 6})

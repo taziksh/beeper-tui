@@ -20,6 +20,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.loadingMsgs = false
 		}
 		return m, nil
+	case sendResultMsg:
+		if msg.err != nil {
+			if m.failedSends == nil {
+				m.failedSends = map[string]bool{}
+			}
+			m.failedSends[msg.localID] = true
+		}
+		return m, nil
 	case errMsg:
 		m.err = msg.err
 		m.loadingChats = false

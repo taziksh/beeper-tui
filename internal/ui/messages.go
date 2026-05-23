@@ -42,6 +42,21 @@ func (m Model) loadMessagesCmd(chatID string) tea.Cmd {
 	}
 }
 
+type sendResultMsg struct {
+	localID string
+	err     error
+}
+
+func (m Model) sendMessageCmd(chatID, localID, text string) tea.Cmd {
+	client := m.client
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		err := client.SendMessage(ctx, chatID, text)
+		return sendResultMsg{localID: localID, err: err}
+	}
+}
+
 // markReadCmd marks a chat read, best-effort (read state isn't worth surfacing
 // an error for).
 func (m Model) markReadCmd(chatID string) tea.Cmd {

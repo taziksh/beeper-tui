@@ -31,7 +31,8 @@ type Model struct {
 	msgOffset     int // first visible message row
 
 	// compose state (INSERT mode)
-	input string
+	input       string
+	failedSends map[string]bool // local ids of optimistic sends that errored
 
 	width  int
 	height int
@@ -45,5 +46,5 @@ type Model struct {
 
 // New builds the initial model. The chat fetch happens in Init, not here.
 func New(client *api.Client) Model {
-	return Model{client: client, mode: ModeList, loadingChats: true}
+	return Model{client: client, mode: ModeList, loadingChats: true, failedSends: map[string]bool{}}
 }
