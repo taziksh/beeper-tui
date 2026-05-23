@@ -141,3 +141,39 @@ func TestHandleKey_I_IgnoredInList(t *testing.T) {
 		t.Errorf("mode = %v, want ModeList (i is a no-op in the list)", m2.mode)
 	}
 }
+
+func TestHandleInsertKey_TypingAppendsText(t *testing.T) {
+	m := Model{mode: ModeInsert}
+	m, _ = m.handleInsertKey("h", "h")
+	m, _ = m.handleInsertKey("i", "i")
+	if m.input != "hi" {
+		t.Errorf("input = %q, want hi", m.input)
+	}
+}
+
+func TestHandleInsertKey_Backspace(t *testing.T) {
+	m := Model{mode: ModeInsert, input: "hi"}
+	m, _ = m.handleInsertKey("backspace", "")
+	if m.input != "h" {
+		t.Errorf("input = %q, want h", m.input)
+	}
+}
+
+func TestHandleInsertKey_BackspaceEmpty_NoPanic(t *testing.T) {
+	m := Model{mode: ModeInsert, input: ""}
+	m, _ = m.handleInsertKey("backspace", "")
+	if m.input != "" {
+		t.Errorf("input = %q, want empty", m.input)
+	}
+}
+
+func TestHandleInsertKey_EscDiscardsAndReturnsToNormal(t *testing.T) {
+	m := Model{mode: ModeInsert, input: "draft", currentChatID: "a"}
+	m, _ = m.handleInsertKey("esc", "")
+	if m.mode != ModeConversation {
+		t.Errorf("mode = %v, want ModeConversation", m.mode)
+	}
+	if m.input != "" {
+		t.Errorf("input = %q, want empty (draft discarded)", m.input)
+	}
+}

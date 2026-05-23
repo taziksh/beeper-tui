@@ -30,6 +30,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		return m.clampWindow(), nil
 	case tea.KeyPressMsg:
+		if m.mode == ModeInsert {
+			return m.handleInsertKey(msg.String(), msg.Text)
+		}
 		return m.handleKey(msg.String())
 	}
 	return m, nil

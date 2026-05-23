@@ -118,6 +118,35 @@ func (m Model) backToList() Model {
 	return m
 }
 
+// handleInsertKey processes keys while composing. `key` is the key name
+// (e.g. "enter", "esc", "backspace"); `text` is the literal characters a
+// printable key produced (empty for named keys).
+func (m Model) handleInsertKey(key, text string) (Model, tea.Cmd) {
+	switch key {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "esc":
+		m.input = ""
+		m.mode = ModeConversation
+		return m, nil
+	case "enter":
+		return m.sendInput()
+	case "backspace":
+		if r := []rune(m.input); len(r) > 0 {
+			m.input = string(r[:len(r)-1])
+		}
+		return m, nil
+	default:
+		m.input += text
+		return m, nil
+	}
+}
+
+// sendInput is fully implemented in Task 6.
+func (m Model) sendInput() (Model, tea.Cmd) {
+	return m, nil
+}
+
 // handleKey maps a key string to a pure method. Update stays thin.
 func (m Model) handleKey(key string) (Model, tea.Cmd) {
 	if key != "g" {

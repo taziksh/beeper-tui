@@ -30,6 +30,9 @@ type Model struct {
 	messages      []api.Message
 	msgOffset     int // first visible message row
 
+	// compose state (INSERT mode)
+	input string
+
 	width  int
 	height int
 
