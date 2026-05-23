@@ -153,6 +153,22 @@ func TestRender_UnreadChatHasGlyph(t *testing.T) {
 	}
 }
 
+func TestRender_UnreadMessageHasMarker(t *testing.T) {
+	m := Model{
+		mode: ModeConversation, width: 80, height: 24,
+		currentChatID: "a",
+		chats:         []api.Chat{{ID: "a", Title: "Alice"}},
+		messages: []api.Message{
+			{ID: "m1", SenderName: "Alice", Text: "seen this", IsUnread: false},
+			{ID: "m2", SenderName: "Alice", Text: "brand new", IsUnread: true},
+		},
+	}
+	out := m.render()
+	if !strings.Contains(out, "▎") {
+		t.Errorf("unread message row missing ▎ marker: %q", out)
+	}
+}
+
 func TestRender_ConversationLoading(t *testing.T) {
 	m := Model{
 		mode: ModeConversation, loadingMsgs: true, width: 80, height: 24,

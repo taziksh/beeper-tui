@@ -96,7 +96,11 @@ func (m Model) renderConversation() string {
 			who = "You"
 		}
 		ts := msg.Timestamp.Format("15:04")
-		line := fmt.Sprintf("%s  %-12s  %s", ts, truncate(who, 12), msg.Text)
+		marker := " "
+		if msg.IsUnread {
+			marker = accentStyle.Render(msgMarker)
+		}
+		line := fmt.Sprintf("%s %s  %-12s  %s", marker, ts, truncate(who, 12), msg.Text)
 		if m.failedSends[msg.ID] {
 			line += "  ! send failed"
 		}
