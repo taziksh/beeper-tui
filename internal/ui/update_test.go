@@ -122,19 +122,36 @@ func TestUpdate_ChatsLoaded_SortsUnreadToTopAndPinsSelection(t *testing.T) {
 	}
 }
 
-func TestUpdate_MessagesLoaded_ScrollsToFirstUnread(t *testing.T) {
-	// height 7 -> visibleRows 5. 10 messages, first unread at index 6.
+func TestUpdate_MessagesLoaded_ScrollsToFirstUnread_Clamped(t *testing.T) {
+	// height 7 -> visibleRows 5 -> maxMsgOffset 5. First unread at index 6 can't
+	// sit at the very top, so the offset clamps to 5 (unread still visible).
 	ms := make([]api.Message, 10)
 	for i := range ms {
 		ms[i] = api.Message{ID: fmt.Sprintf("m%d", i), Text: "x"}
 	}
 	ms[6].IsUnread = true
 	ms[7].IsUnread = true
-	m := Model{currentChatID: "a", loadingMsgs: true, height: 7}
+	m := Model{mode: ModeConversation, currentChatID: "a", loadingMsgs: true, height: 7}
 	got, _ := m.Update(messagesLoadedMsg{chatID: "a", messages: ms})
 	gm := got.(Model)
-	if gm.msgOffset != 6 {
-		t.Errorf("msgOffset = %d, want 6 (first unread at top)", gm.msgOffset)
+	if gm.msgOffset != 5 {
+		t.Errorf("msgOffset = %d, want 5 (first unread clamped to keep it visible)", gm.msgOffset)
+	}
+}
+
+func TestUpdate_MessagesLoaded_ScrollsToFirstUnread_MidList(t *testing.T) {
+	// First unread at index 2, well within range, so the offset lands exactly on
+	// it (no clamp): 2 <= maxMsgOffset 5.
+	ms := make([]api.Message, 10)
+	for i := range ms {
+		ms[i] = api.Message{ID: fmt.Sprintf("m%d", i), Text: "x"}
+	}
+	ms[2].IsUnread = true
+	m := Model{mode: ModeConversation, currentChatID: "a", loadingMsgs: true, height: 7}
+	got, _ := m.Update(messagesLoadedMsg{chatID: "a", messages: ms})
+	gm := got.(Model)
+	if gm.msgOffset != 2 {
+		t.Errorf("msgOffset = %d, want 2 (first unread at top, unclamped)", gm.msgOffset)
 	}
 }
 

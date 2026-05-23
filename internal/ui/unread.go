@@ -15,9 +15,12 @@ const (
 	msgMarker   = "▎" // left bar on an unread message row
 )
 
-// accentStyle colors unread indicators. ANSI "3" (yellow) respects the user's
-// terminal theme; lipgloss renders it as plain text under `go test` (no TTY).
-var accentStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
+// accentColor signals "unread" — ANSI "3" (yellow) respects the user's terminal
+// theme; lipgloss renders it as plain text under `go test` (no TTY).
+var accentColor = lipgloss.Color("3")
+
+// accentStyle is the accent applied on its own (e.g. message markers).
+var accentStyle = lipgloss.NewStyle().Foreground(accentColor)
 
 // sortChats floats unread chats to the top, most-recent-first within each
 // group.

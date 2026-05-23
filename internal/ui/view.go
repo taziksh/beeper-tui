@@ -30,7 +30,6 @@ func (m Model) renderList() string {
 	if m.loadingChats {
 		return "Loading chats…\n"
 	}
-	sel := lipgloss.NewStyle().Bold(true)
 	var b strings.Builder
 	b.WriteString("CHATS\n")
 	vr := m.visibleRows()
@@ -40,18 +39,26 @@ func (m Model) renderList() string {
 	}
 	for i := m.offset; i < end; i++ {
 		c := m.chats[i]
-		mark := readGlyph
-		count := fmt.Sprintf("%4d", c.Unread)
-		if c.Unread > 0 {
-			mark = accentStyle.Render(unreadGlyph)
-			count = accentStyle.Render(count)
-		}
-		line := fmt.Sprintf("%s [%-10s] %s  %s", mark, truncate(c.Network, 10), count, c.Title)
+		// base carries selection (bold); accent adds the unread color on top, so
+		// a selected unread row renders both bold AND colored.
+		base := lipgloss.NewStyle()
 		if i == m.selected {
-			line = sel.Render("> " + line)
-		} else {
-			line = "  " + line
+			base = base.Bold(true)
 		}
+		accent := base
+		mark := readGlyph
+		if c.Unread > 0 {
+			accent = accent.Foreground(accentColor)
+			mark = unreadGlyph
+		}
+		prefix := "  "
+		if i == m.selected {
+			prefix = "> "
+		}
+		line := base.Render(prefix) + accent.Render(mark) +
+			base.Render(fmt.Sprintf(" [%-10s] ", truncate(c.Network, 10))) +
+			accent.Render(fmt.Sprintf("%4d", c.Unread)) +
+			base.Render("  "+c.Title)
 		b.WriteString(line + "\n")
 	}
 	b.WriteString(m.statusBar())
@@ -96,7 +103,7 @@ func (m Model) renderConversation() string {
 			who = "You"
 		}
 		ts := msg.Timestamp.Format("15:04")
-		marker := " "
+		marker := readGlyph
 		if msg.IsUnread {
 			marker = accentStyle.Render(msgMarker)
 		}
