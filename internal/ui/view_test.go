@@ -138,6 +138,21 @@ func TestRender_ConversationLoadError_WordWrapped(t *testing.T) {
 	}
 }
 
+func TestRender_UnreadChatHasGlyph(t *testing.T) {
+	m := Model{
+		mode: ModeList, width: 80, height: 24,
+		chats: []api.Chat{
+			{ID: "a", Network: "Signal", Title: "Alice", Unread: 0},
+			{ID: "b", Network: "WhatsApp", Title: "Dev Team", Unread: 5},
+		},
+		selected: 0,
+	}
+	out := m.render()
+	if !strings.Contains(out, "●") {
+		t.Errorf("unread chat row missing ● glyph: %q", out)
+	}
+}
+
 func TestRender_ConversationLoading(t *testing.T) {
 	m := Model{
 		mode: ModeConversation, loadingMsgs: true, width: 80, height: 24,

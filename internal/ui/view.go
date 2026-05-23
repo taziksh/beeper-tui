@@ -40,11 +40,13 @@ func (m Model) renderList() string {
 	}
 	for i := m.offset; i < end; i++ {
 		c := m.chats[i]
-		mark := " "
+		mark := readGlyph
+		count := fmt.Sprintf("%4d", c.Unread)
 		if c.Unread > 0 {
-			mark = "*"
+			mark = accentStyle.Render(unreadGlyph)
+			count = accentStyle.Render(count)
 		}
-		line := fmt.Sprintf("%s [%-10s] %4d  %s", mark, truncate(c.Network, 10), c.Unread, c.Title)
+		line := fmt.Sprintf("%s [%-10s] %s  %s", mark, truncate(c.Network, 10), count, c.Title)
 		if i == m.selected {
 			line = sel.Render("> " + line)
 		} else {
