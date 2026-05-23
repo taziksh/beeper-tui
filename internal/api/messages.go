@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	beeperdesktopapi "github.com/beeper/desktop-api-go/v5"
 	"github.com/beeper/desktop-api-go/v5/shared"
@@ -18,6 +19,9 @@ func (c *Client) ListMessages(ctx context.Context, chatID string) ([]Message, er
 	for _, m := range page.Items {
 		out = append(out, mapMessage(m))
 	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Timestamp.Before(out[j].Timestamp)
+	})
 	return out, nil
 }
 
