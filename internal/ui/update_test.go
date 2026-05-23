@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -100,6 +101,23 @@ func TestUpdate_SendResultSuccess_NotMarked(t *testing.T) {
 	gm := got.(Model)
 	if gm.failedSends["local:1"] {
 		t.Error("a successful send must not be marked failed")
+	}
+}
+
+func TestUpdate_ChatsLoaded_SortsUnreadToTopAndPinsSelection(t *testing.T) {
+	t0 := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	// User had "b" selected before the refresh.
+	m := Model{loadingChats: true, chats: []api.Chat{{ID: "a"}, {ID: "b"}}, selected: 1}
+	got, _ := m.Update(chatsLoadedMsg{chats: []api.Chat{
+		{ID: "a", Unread: 0, LastActive: t0.Add(time.Hour)},
+		{ID: "b", Unread: 3, LastActive: t0},
+	}})
+	gm := got.(Model)
+	if gm.chats[0].ID != "b" {
+		t.Errorf("chats[0].ID = %q, want b (unread floats up)", gm.chats[0].ID)
+	}
+	if gm.chats[gm.selected].ID != "b" {
+		t.Errorf("selection landed on %q, want b (pinned by ID across re-sort)", gm.chats[gm.selected].ID)
 	}
 }
 

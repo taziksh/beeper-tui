@@ -11,9 +11,21 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case chatsLoadedMsg:
-		m.chats = msg.chats
+		// Pin the user's selection across the re-sort by chat ID, so unread
+		// chats can float to the top without the cursor jumping to a different
+		// chat. An empty prior selection (initial load) resolves to index 0.
+		var selectedID string
+		if m.selected < len(m.chats) {
+			selectedID = m.chats[m.selected].ID
+		}
+		chats := msg.chats
+		sortChats(chats)
+		m.chats = chats
+		if selectedID != "" {
+			m.selected = reselectByID(m.chats, selectedID)
+		}
 		m.loadingChats = false
-		return m, nil
+		return m.clampWindow(), nil
 	case messagesLoadedMsg:
 		if msg.chatID == m.currentChatID {
 			m.messages = msg.messages
