@@ -31,6 +31,17 @@ func sortChats(chats []api.Chat) {
 	})
 }
 
+// firstUnreadIndex returns the index of the earliest unread message, or -1 if
+// none are unread.
+func firstUnreadIndex(msgs []api.Message) int {
+	for i, msg := range msgs {
+		if msg.IsUnread {
+			return i
+		}
+	}
+	return -1
+}
+
 // reselectByID returns the index of the chat with id after a re-sort, or 0 if
 // it's no longer present (e.g. filtered away). Callers clamp as needed.
 func reselectByID(chats []api.Chat, id string) int {

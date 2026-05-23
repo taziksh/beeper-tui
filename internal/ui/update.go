@@ -30,7 +30,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.chatID == m.currentChatID {
 			m.messages = msg.messages
 			m.loadingMsgs = false
-			m.msgOffset = m.maxMsgOffset()
+			// Land on the first unread message so new content is at the top of
+			// the viewport; with nothing unread, fall back to the bottom.
+			if u := firstUnreadIndex(m.messages); u >= 0 {
+				m.msgOffset = u
+				m = m.clampWindow()
+			} else {
+				m.msgOffset = m.maxMsgOffset()
+			}
 		}
 		return m, nil
 	case sendResultMsg:
