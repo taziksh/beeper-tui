@@ -22,13 +22,20 @@ var accentColor = lipgloss.Color("3")
 // accentStyle is the accent applied on its own (e.g. message markers).
 var accentStyle = lipgloss.NewStyle().Foreground(accentColor)
 
+// isActiveUnread reports whether a chat should float to the top: it has unread
+// messages and isn't muted or low-priority (those are noise the user has
+// already deprioritized, so they stay in recency order instead of jumping up).
+func isActiveUnread(c api.Chat) bool {
+	return c.Unread > 0 && !c.Muted && !c.LowPriority
+}
+
 // sortChats floats unread chats to the top, most-recent-first within each
 // group.
 func sortChats(chats []api.Chat) {
 	sort.SliceStable(chats, func(i, j int) bool {
-		iUnread, jUnread := chats[i].Unread > 0, chats[j].Unread > 0
+		iUnread, jUnread := isActiveUnread(chats[i]), isActiveUnread(chats[j])
 		if iUnread != jUnread {
-			return iUnread // unread (true) sorts before read (false)
+			return iUnread // active unread floats above everything else
 		}
 		return chats[i].LastActive.After(chats[j].LastActive)
 	})
