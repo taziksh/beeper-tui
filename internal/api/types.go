@@ -22,4 +22,5 @@ type Message struct {
 	Text       string
 	Timestamp  time.Time
 	IsFromMe   bool
+	IsUnread   bool // true if unread for the authenticated user; may be absent on some networks
 }

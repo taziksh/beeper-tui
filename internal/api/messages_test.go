@@ -113,6 +113,31 @@ func TestListMessages_SubstitutesReactionSender(t *testing.T) {
 	}
 }
 
+func TestListMessages_MapsIsUnread(t *testing.T) {
+	const json = `{
+	  "items": [
+	    {"id":"m1","accountID":"acc","chatID":"chat-1","senderID":"u1","sortKey":"1","text":"old","timestamp":"2026-05-19T10:00:00Z","isSender":false,"senderName":"Bob","isUnread":false},
+	    {"id":"m2","accountID":"acc","chatID":"chat-1","senderID":"u1","sortKey":"2","text":"new","timestamp":"2026-05-19T10:01:00Z","isSender":false,"senderName":"Bob","isUnread":true}
+	  ],
+	  "hasMore": false, "oldestCursor": "o", "newestCursor": "n"
+	}`
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(json))
+	})
+
+	msgs, err := client.ListMessages(context.Background(), "chat-1")
+	if err != nil {
+		t.Fatalf("ListMessages() error = %v", err)
+	}
+	if msgs[0].IsUnread {
+		t.Error("msgs[0].IsUnread = true, want false")
+	}
+	if !msgs[1].IsUnread {
+		t.Error("msgs[1].IsUnread = false, want true")
+	}
+}
+
 func TestListMessages_SortsOldestFirst(t *testing.T) {
 	// Items deliberately newest-first in the payload; output must be oldest-first.
 	const reversedJSON = `{
