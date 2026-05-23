@@ -3,7 +3,9 @@ package api
 import (
 	"context"
 	"fmt"
+	"html"
 	"sort"
+	"strings"
 
 	beeperdesktopapi "github.com/beeper/desktop-api-go/v5"
 	"github.com/beeper/desktop-api-go/v5/shared"
@@ -30,8 +32,20 @@ func mapMessage(m shared.Message) Message {
 		ID:         m.ID,
 		ChatID:     m.ChatID,
 		SenderName: m.SenderName,
-		Text:       m.Text,
+		Text:       renderText(m),
 		Timestamp:  m.Timestamp,
 		IsFromMe:   m.IsSender,
 	}
+}
+
+// renderText decodes HTML entities and substitutes templated placeholders
+// (e.g. the {{sender}} used in reaction text) into the resolved sender name,
+// or "You" for the authenticated user's own messages.
+func renderText(m shared.Message) string {
+	sender := m.SenderName
+	if m.IsSender {
+		sender = "You"
+	}
+	text := strings.ReplaceAll(m.Text, "{{sender}}", sender)
+	return html.UnescapeString(text)
 }
