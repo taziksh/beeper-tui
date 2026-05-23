@@ -89,14 +89,24 @@ func (m Model) renderConversation() string {
 			who = "You"
 		}
 		ts := msg.Timestamp.Format("15:04")
-		b.WriteString(fmt.Sprintf("%s  %-12s  %s\n", ts, truncate(who, 12), msg.Text))
+		line := fmt.Sprintf("%s  %-12s  %s", ts, truncate(who, 12), msg.Text)
+		if m.failedSends[msg.ID] {
+			line += "  ! send failed"
+		}
+		b.WriteString(line + "\n")
+	}
+	if m.mode == ModeInsert {
+		b.WriteString("> " + m.input + "█\n")
 	}
 	b.WriteString(m.convStatusBar())
 	return b.String()
 }
 
 func (m Model) convStatusBar() string {
-	return "NORMAL  j/k scroll · esc back · q quit"
+	if m.mode == ModeInsert {
+		return "INSERT  enter send · esc cancel"
+	}
+	return "NORMAL  j/k scroll · i reply · esc back · q quit"
 }
 
 func truncate(s string, n int) string {
