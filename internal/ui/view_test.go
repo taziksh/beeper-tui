@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -96,6 +97,44 @@ func TestRender_FailedSendMarker(t *testing.T) {
 	out := m.render()
 	if !strings.Contains(out, "! send failed") {
 		t.Errorf("failed optimistic message missing marker: %q", out)
+	}
+}
+
+func TestRender_ConversationLoadError_ShownInBody(t *testing.T) {
+	m := Model{
+		mode: ModeConversation, width: 80, height: 24,
+		currentChatID: "a",
+		chats:         []api.Chat{{ID: "a", Title: "Alice"}},
+		convErr:       errors.New("ListMessages failed: read error"),
+	}
+	out := m.render()
+	if !strings.Contains(out, "read error") {
+		t.Errorf("conversation error should appear in the body: %q", out)
+	}
+	if !strings.Contains(out, "Alice") {
+		t.Errorf("conversation header (chat title) should still show: %q", out)
+	}
+	if !strings.Contains(out, "esc") {
+		t.Errorf("status bar with esc hint should still show so the user can get out: %q", out)
+	}
+}
+
+func TestRender_ConversationLoadError_WordWrapped(t *testing.T) {
+	long := errors.New(strings.TrimSpace(strings.Repeat("connection reset by peer ", 12)))
+	m := Model{
+		mode: ModeConversation, width: 70, height: 24,
+		currentChatID: "a",
+		chats:         []api.Chat{{ID: "a", Title: "Alice"}},
+		convErr:       long,
+	}
+	out := m.render()
+	for _, line := range strings.Split(out, "\n") {
+		if len([]rune(line)) > 70 {
+			t.Errorf("line exceeds width 70 (error not word-wrapped): %q", line)
+		}
+	}
+	if !strings.Contains(out, "connection") || !strings.Contains(out, "peer") {
+		t.Errorf("word-wrapped error lost content: %q", out)
 	}
 }
 

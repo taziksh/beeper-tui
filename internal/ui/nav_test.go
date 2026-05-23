@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/taziksh/beeper-tui/internal/api"
@@ -100,6 +102,41 @@ func TestBackToList(t *testing.T) {
 	m = m.backToList()
 	if m.mode != ModeList {
 		t.Error("mode should be ModeList")
+	}
+}
+
+func TestBackToList_ClearsConvErr(t *testing.T) {
+	m := Model{mode: ModeConversation, currentChatID: "a", convErr: errors.New("read error")}
+	m = m.backToList()
+	if m.convErr != nil {
+		t.Error("returning to the list should clear the conversation error")
+	}
+}
+
+func TestHandleKey_Esc_AfterConvError_ReturnsToList(t *testing.T) {
+	m := Model{
+		mode: ModeConversation, width: 80, height: 24, currentChatID: "a",
+		chats:   []api.Chat{{ID: "a", Title: "Alice"}, {ID: "b", Title: "Dev Team"}},
+		convErr: errors.New("read error"),
+	}
+	m2, _ := m.handleKey("esc")
+	if m2.mode != ModeList {
+		t.Errorf("esc should return to the list, mode = %v", m2.mode)
+	}
+	out := m2.render()
+	if strings.Contains(out, "read error") {
+		t.Errorf("the error must not persist after returning to the list: %q", out)
+	}
+	if !strings.Contains(out, "Dev Team") {
+		t.Errorf("list should be visible after esc: %q", out)
+	}
+}
+
+func TestOpenSelected_ClearsStaleConvErr(t *testing.T) {
+	m := Model{mode: ModeList, chats: []api.Chat{{ID: "a", Title: "Alice"}}, selected: 0, convErr: errors.New("old error")}
+	m2, _ := m.openSelected()
+	if m2.convErr != nil {
+		t.Error("opening a chat should clear any stale conversation error")
 	}
 }
 

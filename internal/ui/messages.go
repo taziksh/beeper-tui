@@ -14,7 +14,10 @@ type messagesLoadedMsg struct {
 	chatID   string
 	messages []api.Message
 }
-type errMsg struct{ err error }
+type errMsg struct {
+	chatID string // set for conversation-load errors; empty for chat-list errors
+	err    error
+}
 
 func (m Model) loadChatsCmd() tea.Cmd {
 	client := m.client
@@ -36,7 +39,7 @@ func (m Model) loadMessagesCmd(chatID string) tea.Cmd {
 		defer cancel()
 		msgs, err := client.ListMessages(ctx, chatID)
 		if err != nil {
-			return errMsg{err: err}
+			return errMsg{chatID: chatID, err: err}
 		}
 		return messagesLoadedMsg{chatID: chatID, messages: msgs}
 	}

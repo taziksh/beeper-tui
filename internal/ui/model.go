@@ -40,7 +40,8 @@ type Model struct {
 
 	loadingChats bool
 	loadingMsgs  bool
-	err          error
+	err          error // fatal chat-list load error (full-screen)
+	convErr      error // conversation-load error, scoped to the conversation body
 
 	pendingG bool // tracks a pending `g` for the `gg` motion
 }

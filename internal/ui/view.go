@@ -72,6 +72,11 @@ func (m Model) chatTitle(id string) string {
 func (m Model) renderConversation() string {
 	var b strings.Builder
 	b.WriteString(m.chatTitle(m.currentChatID) + "\n")
+	if m.convErr != nil {
+		b.WriteString(wrap(fmt.Sprintf("Error loading messages: %v", m.convErr), m.width) + "\n")
+		b.WriteString(m.convStatusBar())
+		return b.String()
+	}
 	if m.loadingMsgs {
 		b.WriteString("Loading messages…\n")
 		b.WriteString(m.convStatusBar())
@@ -107,6 +112,16 @@ func (m Model) convStatusBar() string {
 		return "INSERT  enter send · esc cancel"
 	}
 	return "NORMAL  j/k scroll · i reply · esc back · q quit"
+}
+
+// wrap word-wraps s to width w so long errors stay fully readable instead of
+// being truncated by the terminal edge. Width 0 (before the first WindowSizeMsg)
+// returns the text unwrapped.
+func wrap(s string, w int) string {
+	if w <= 0 {
+		return s
+	}
+	return lipgloss.NewStyle().Width(w).Render(s)
 }
 
 func truncate(s string, n int) string {

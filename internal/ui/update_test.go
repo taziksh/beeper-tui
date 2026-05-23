@@ -61,6 +61,30 @@ func TestUpdate_Error(t *testing.T) {
 	}
 }
 
+func TestUpdate_ConversationLoadError_ScopedNotGlobal(t *testing.T) {
+	m := Model{mode: ModeConversation, currentChatID: "a", loadingMsgs: true}
+	got, _ := m.Update(errMsg{chatID: "a", err: errors.New("read error")})
+	gm := got.(Model)
+	if gm.convErr == nil {
+		t.Error("a conversation-load error should set convErr (scoped to the conversation)")
+	}
+	if gm.err != nil {
+		t.Error("a conversation-load error must NOT set the global err (that traps the user full-screen)")
+	}
+	if gm.loadingMsgs {
+		t.Error("loadingMsgs should be cleared after a conversation-load error")
+	}
+}
+
+func TestUpdate_StaleConversationError_Ignored(t *testing.T) {
+	m := Model{mode: ModeConversation, currentChatID: "a"}
+	got, _ := m.Update(errMsg{chatID: "OLD", err: errors.New("read error")})
+	gm := got.(Model)
+	if gm.convErr != nil {
+		t.Error("an error for a non-current chat must be ignored")
+	}
+}
+
 func TestUpdate_SendResultError_MarksFailed(t *testing.T) {
 	m := Model{failedSends: map[string]bool{}}
 	got, _ := m.Update(sendResultMsg{localID: "local:1", err: errors.New("network down")})

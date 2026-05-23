@@ -30,6 +30,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case errMsg:
+		if msg.chatID != "" {
+			// Conversation-load error: scope it to the conversation body so the
+			// list stays reachable via esc. Ignore errors for a stale chat.
+			if msg.chatID == m.currentChatID {
+				m.convErr = msg.err
+				m.loadingMsgs = false
+			}
+			return m, nil
+		}
 		m.err = msg.err
 		m.loadingChats = false
 		m.loadingMsgs = false

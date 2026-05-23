@@ -114,12 +114,14 @@ func (m Model) openSelected() (Model, tea.Cmd) {
 	m.currentChatID = chat.ID
 	m.messages = nil
 	m.msgOffset = 0
+	m.convErr = nil
 	m.loadingMsgs = true
 	return m, tea.Batch(m.loadMessagesCmd(chat.ID), m.markReadCmd(chat.ID))
 }
 
 func (m Model) backToList() Model {
 	m.mode = ModeList
+	m.convErr = nil
 	return m
 }
 
