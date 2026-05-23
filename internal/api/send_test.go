@@ -34,6 +34,24 @@ func TestSendMessage_PostsTextToChat(t *testing.T) {
 	}
 }
 
+func TestSendMessage_EncodesHashInChatID(t *testing.T) {
+	const chatID = "imsg##thread:abc123"
+	var gotPath string
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"chatID":"x","pendingMessageID":"p"}`))
+	})
+
+	if err := client.SendMessage(context.Background(), chatID, "hi"); err != nil {
+		t.Fatalf("SendMessage() error = %v", err)
+	}
+	want := "/v1/chats/" + chatID + "/messages"
+	if gotPath != want {
+		t.Errorf("server received path %q, want %q (a '#' chat id must survive encoding)", gotPath, want)
+	}
+}
+
 func TestSendMessage_SurfacesError(t *testing.T) {
 	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

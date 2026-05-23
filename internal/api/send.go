@@ -11,7 +11,7 @@ import (
 // asynchronously (returning a pending id we don't need here); only success or
 // failure matters — the UI shows the message optimistically.
 func (c *Client) SendMessage(ctx context.Context, chatID, text string) error {
-	_, err := c.sdk.Messages.Send(ctx, chatID, beeperdesktopapi.MessageSendParams{
+	_, err := c.sdk.Messages.Send(ctx, escapeChatID(chatID), beeperdesktopapi.MessageSendParams{
 		Text: beeperdesktopapi.String(text),
 	})
 	if err != nil {

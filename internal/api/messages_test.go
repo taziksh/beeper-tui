@@ -41,6 +41,26 @@ func TestListMessages_MapsMessages(t *testing.T) {
 	}
 }
 
+func TestListMessages_EncodesHashInChatID(t *testing.T) {
+	// iMessage chat IDs contain '#'. Unencoded, url.Parse treats it as a URL
+	// fragment, so the server only receives "imsg" and returns 404 (bd-nz5).
+	const chatID = "imsg##thread:abc123"
+	var gotPath string
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[],"hasMore":false,"oldestCursor":"","newestCursor":""}`))
+	})
+
+	if _, err := client.ListMessages(context.Background(), chatID); err != nil {
+		t.Fatalf("ListMessages() error = %v", err)
+	}
+	want := "/v1/chats/" + chatID + "/messages"
+	if gotPath != want {
+		t.Errorf("server received path %q, want %q (a '#' chat id must survive encoding)", gotPath, want)
+	}
+}
+
 func TestListMessages_SortsOldestFirst(t *testing.T) {
 	// Items deliberately newest-first in the payload; output must be oldest-first.
 	const reversedJSON = `{

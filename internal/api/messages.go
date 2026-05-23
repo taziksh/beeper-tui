@@ -11,7 +11,7 @@ import (
 
 // ListMessages fetches recent messages in a chat.
 func (c *Client) ListMessages(ctx context.Context, chatID string) ([]Message, error) {
-	page, err := c.sdk.Messages.List(ctx, chatID, beeperdesktopapi.MessageListParams{})
+	page, err := c.sdk.Messages.List(ctx, escapeChatID(chatID), beeperdesktopapi.MessageListParams{})
 	if err != nil {
 		return nil, fmt.Errorf("api: list messages for %s: %w", chatID, err)
 	}
