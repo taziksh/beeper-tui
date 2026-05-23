@@ -33,6 +33,7 @@ type Model struct {
 	// compose state (INSERT mode)
 	input       string
 	failedSends map[string]bool // local ids of optimistic sends that errored
+	localSeq    int             // mints local ids for optimistic messages
 
 	width  int
 	height int

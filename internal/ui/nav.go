@@ -1,7 +1,12 @@
 package ui
 
 import (
+	"fmt"
+	"time"
+
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/taziksh/beeper-tui/internal/api"
 )
 
 // visibleRows is how many rows the list/conversation body can show. It reserves
@@ -142,9 +147,28 @@ func (m Model) handleInsertKey(key, text string) (Model, tea.Cmd) {
 	}
 }
 
-// sendInput is fully implemented in Task 6.
+// sendInput appends the draft as an optimistic message, clears the compose
+// line, returns to NORMAL, and fires the send command. Empty input is a no-op
+// (stays in INSERT).
 func (m Model) sendInput() (Model, tea.Cmd) {
-	return m, nil
+	text := m.input
+	if text == "" {
+		return m, nil
+	}
+	m.localSeq++
+	localID := fmt.Sprintf("local:%d", m.localSeq)
+	m.messages = append(m.messages, api.Message{
+		ID:         localID,
+		ChatID:     m.currentChatID,
+		SenderName: "You",
+		Text:       text,
+		Timestamp:  time.Now(),
+		IsFromMe:   true,
+	})
+	m.input = ""
+	m.mode = ModeConversation
+	m = m.jumpBottom()
+	return m, m.sendMessageCmd(m.currentChatID, localID, text)
 }
 
 // handleKey maps a key string to a pure method. Update stays thin.

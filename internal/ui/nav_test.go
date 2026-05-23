@@ -177,3 +177,41 @@ func TestHandleInsertKey_EscDiscardsAndReturnsToNormal(t *testing.T) {
 		t.Errorf("input = %q, want empty (draft discarded)", m.input)
 	}
 }
+
+func TestSendInput_AppendsOptimisticallyAndReturnsToNormal(t *testing.T) {
+	m := Model{mode: ModeInsert, input: "see you at 7", currentChatID: "a", height: 24}
+	m2, cmd := m.sendInput()
+	if cmd == nil {
+		t.Fatal("sendInput should return a send command")
+	}
+	if len(m2.messages) != 1 {
+		t.Fatalf("messages = %d, want 1 optimistic message", len(m2.messages))
+	}
+	last := m2.messages[0]
+	if last.Text != "see you at 7" || !last.IsFromMe {
+		t.Errorf("optimistic message = %+v, want text 'see you at 7' from me", last)
+	}
+	if last.ID != "local:1" {
+		t.Errorf("optimistic id = %q, want local:1", last.ID)
+	}
+	if m2.input != "" {
+		t.Errorf("input = %q, want cleared", m2.input)
+	}
+	if m2.mode != ModeConversation {
+		t.Errorf("mode = %v, want ModeConversation after send", m2.mode)
+	}
+}
+
+func TestSendInput_EmptyIsNoOp(t *testing.T) {
+	m := Model{mode: ModeInsert, input: "", currentChatID: "a"}
+	m2, cmd := m.sendInput()
+	if cmd != nil {
+		t.Error("empty input must not issue a send command")
+	}
+	if len(m2.messages) != 0 {
+		t.Error("empty input must not append a message")
+	}
+	if m2.mode != ModeInsert {
+		t.Errorf("mode = %v, want ModeInsert (stay composing on empty enter)", m2.mode)
+	}
+}
