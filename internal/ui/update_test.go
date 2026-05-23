@@ -33,6 +33,16 @@ func TestUpdate_MessagesLoadedForCurrentChat(t *testing.T) {
 	}
 }
 
+func TestUpdate_MessagesLoaded_OpensAtBottom(t *testing.T) {
+	// height 7 -> visibleRows 5; 20 messages -> maxMsgOffset 15.
+	m := Model{currentChatID: "a", loadingMsgs: true, height: 7}
+	got, _ := m.Update(messagesLoadedMsg{chatID: "a", messages: msgs(20)})
+	gm := got.(Model)
+	if gm.msgOffset != gm.maxMsgOffset() {
+		t.Errorf("msgOffset = %d, want maxMsgOffset %d (open at bottom)", gm.msgOffset, gm.maxMsgOffset())
+	}
+}
+
 func TestUpdate_MessagesIgnoredForStaleChat(t *testing.T) {
 	m := Model{currentChatID: "a", loadingMsgs: true}
 	got, _ := m.Update(messagesLoadedMsg{chatID: "OLD", messages: []api.Message{{ID: "x"}}})
