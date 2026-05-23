@@ -19,7 +19,7 @@ func (m Model) render() string {
 		return fmt.Sprintf("Error: %v\n", m.err)
 	}
 	switch m.mode {
-	case ModeConversation:
+	case ModeConversation, ModeInsert:
 		return m.renderConversation()
 	default:
 		return m.renderList()

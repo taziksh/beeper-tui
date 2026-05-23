@@ -125,3 +125,19 @@ func TestConversationScroll_JumpTopBottom(t *testing.T) {
 		t.Errorf("after jumpBottom msgOffset = %d, want 15", m.msgOffset)
 	}
 }
+
+func TestHandleKey_I_EntersInsertFromConversation(t *testing.T) {
+	m := Model{mode: ModeConversation, currentChatID: "a"}
+	m2, _ := m.handleKey("i")
+	if m2.mode != ModeInsert {
+		t.Errorf("mode = %v, want ModeInsert", m2.mode)
+	}
+}
+
+func TestHandleKey_I_IgnoredInList(t *testing.T) {
+	m := Model{mode: ModeList, chats: chats(2)}
+	m2, _ := m.handleKey("i")
+	if m2.mode != ModeList {
+		t.Errorf("mode = %v, want ModeList (i is a no-op in the list)", m2.mode)
+	}
+}

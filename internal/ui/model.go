@@ -10,6 +10,7 @@ type Mode int
 const (
 	ModeList Mode = iota
 	ModeConversation
+	ModeInsert
 )
 
 // Model holds all TUI state. bubbletea passes it by value through Update, so

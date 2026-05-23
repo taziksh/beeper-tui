@@ -139,6 +139,11 @@ func (m Model) handleKey(key string) (Model, tea.Cmd) {
 		}
 		m.pendingG = true
 		return m, nil
+	case "i":
+		if m.mode == ModeConversation {
+			m.mode = ModeInsert
+		}
+		return m, nil
 	case "enter":
 		if m.mode == ModeList {
 			return m.openSelected()
