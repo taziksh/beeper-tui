@@ -56,6 +56,32 @@ func (m Model) cursorUp() Model {
 	return m.clampWindow()
 }
 
+// halfPage scrolls a half screen at a time, vim-style (Ctrl-u up, Ctrl-d down):
+// dir is -1 for up, +1 for down. In the list it moves the selection; in a
+// conversation it moves the scroll offset. clampWindow keeps everything in range.
+func (m Model) halfPage(dir int) Model {
+	step := m.visibleRows() / 2
+	if step < 1 {
+		step = 1
+	}
+	switch m.mode {
+	case ModeList:
+		if len(m.chats) == 0 {
+			return m
+		}
+		m.selected += dir * step
+		if m.selected < 0 {
+			m.selected = 0
+		}
+		if m.selected > len(m.chats)-1 {
+			m.selected = len(m.chats) - 1
+		}
+	case ModeConversation:
+		m.msgOffset += dir * step
+	}
+	return m.clampWindow()
+}
+
 func (m Model) jumpTop() Model {
 	switch m.mode {
 	case ModeList:
@@ -185,6 +211,10 @@ func (m Model) handleKey(key string) (Model, tea.Cmd) {
 		return m.cursorDown(), nil
 	case "k", "up":
 		return m.cursorUp(), nil
+	case "ctrl+d":
+		return m.halfPage(1), nil
+	case "ctrl+u":
+		return m.halfPage(-1), nil
 	case "G":
 		return m.jumpBottom(), nil
 	case "g":
