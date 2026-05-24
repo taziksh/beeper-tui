@@ -27,8 +27,10 @@ func mapChat(c beeperdesktopapi.ChatListResponse) Chat {
 		Network:    c.Network,
 		Title:      c.Title,
 		Type:       string(c.Type),
-		Unread:     int(c.UnreadCount),
-		LastActive: c.LastActivity,
+		Unread:      int(c.UnreadCount),
+		Muted:       c.IsMuted,
+		LowPriority: c.IsLowPriority,
+		LastActive:  c.LastActivity,
 		Preview:    c.Preview.Text,
 	}
 }

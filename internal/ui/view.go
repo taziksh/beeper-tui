@@ -30,27 +30,44 @@ func (m Model) renderList() string {
 	if m.loadingChats {
 		return "Loading chats…\n"
 	}
-	sel := lipgloss.NewStyle().Bold(true)
 	var b strings.Builder
 	b.WriteString("CHATS\n")
 	vr := m.visibleRows()
-	end := m.offset + vr
-	if end > len(m.chats) {
-		end = len(m.chats)
-	}
-	for i := m.offset; i < end; i++ {
+	lowStart := lowPriorityStart(m.chats)
+	rows := 0
+	for i := m.offset; i < len(m.chats) && rows < vr; i++ {
+		// Emit the section divider once, just before the first low-priority chat
+		// (only when there's a normal section above it to divide from).
+		if i == lowStart && lowStart > 0 {
+			b.WriteString(lowPriorityDivider(m.width) + "\n")
+			rows++
+			if rows >= vr {
+				break
+			}
+		}
 		c := m.chats[i]
-		mark := " "
-		if c.Unread > 0 {
-			mark = "*"
-		}
-		line := fmt.Sprintf("%s [%-10s] %4d  %s", mark, truncate(c.Network, 10), c.Unread, c.Title)
+		// base carries selection (bold); accent adds the unread color on top, so
+		// a selected unread row renders both bold AND colored.
+		base := lipgloss.NewStyle()
 		if i == m.selected {
-			line = sel.Render("> " + line)
-		} else {
-			line = "  " + line
+			base = base.Bold(true)
 		}
+		accent := base
+		mark := readGlyph
+		if c.Unread > 0 {
+			accent = accent.Foreground(accentColor)
+			mark = unreadGlyph
+		}
+		prefix := "  "
+		if i == m.selected {
+			prefix = "> "
+		}
+		line := base.Render(prefix) + accent.Render(mark) +
+			base.Render(fmt.Sprintf(" [%-10s] ", truncate(c.Network, 10))) +
+			accent.Render(fmt.Sprintf("%4d", c.Unread)) +
+			base.Render("  "+c.Title)
 		b.WriteString(line + "\n")
+		rows++
 	}
 	b.WriteString(m.statusBar())
 	return b.String()
@@ -94,7 +111,11 @@ func (m Model) renderConversation() string {
 			who = "You"
 		}
 		ts := msg.Timestamp.Format("15:04")
-		line := fmt.Sprintf("%s  %-12s  %s", ts, truncate(who, 12), msg.Text)
+		marker := readGlyph
+		if msg.IsUnread {
+			marker = accentStyle.Render(msgMarker)
+		}
+		line := fmt.Sprintf("%s %s  %-12s  %s", marker, ts, truncate(who, 12), msg.Text)
 		if m.failedSends[msg.ID] {
 			line += "  ! send failed"
 		}
@@ -129,4 +150,15 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n]
+}
+
+// lowPriorityDivider is the full-width separator that introduces the bottom
+// section of muted/low-priority chats.
+func lowPriorityDivider(w int) string {
+	const label = "─── low priority "
+	pad := w - len([]rune(label))
+	if pad < 0 {
+		return label
+	}
+	return label + strings.Repeat("─", pad)
 }

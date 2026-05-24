@@ -163,6 +163,56 @@ func TestConversationScroll_JumpTopBottom(t *testing.T) {
 	}
 }
 
+func TestHalfPageDown_List(t *testing.T) {
+	// height 12 -> visibleRows 10 -> step 5.
+	m := Model{mode: ModeList, chats: chats(20), selected: 0, height: 12}
+	m, _ = m.handleKey("ctrl+d")
+	if m.selected != 5 {
+		t.Errorf("selected = %d, want 5", m.selected)
+	}
+}
+
+func TestHalfPageUp_List_ClampsTop(t *testing.T) {
+	m := Model{mode: ModeList, chats: chats(20), selected: 3, height: 12}
+	m, _ = m.handleKey("ctrl+u")
+	if m.selected != 0 {
+		t.Errorf("selected = %d, want clamped 0", m.selected)
+	}
+}
+
+func TestHalfPageDown_List_ClampsBottom(t *testing.T) {
+	m := Model{mode: ModeList, chats: chats(20), selected: 18, height: 12}
+	m, _ = m.handleKey("ctrl+d")
+	if m.selected != 19 {
+		t.Errorf("selected = %d, want clamped 19", m.selected)
+	}
+}
+
+func TestHalfPageDown_Conversation(t *testing.T) {
+	// height 7 -> visibleRows 5 -> step 2.
+	m := Model{mode: ModeConversation, messages: msgs(20), height: 7}
+	m, _ = m.handleKey("ctrl+d")
+	if m.msgOffset != 2 {
+		t.Errorf("msgOffset = %d, want 2", m.msgOffset)
+	}
+}
+
+func TestHalfPageUp_Conversation_ClampsTop(t *testing.T) {
+	m := Model{mode: ModeConversation, messages: msgs(20), height: 7, msgOffset: 1}
+	m, _ = m.handleKey("ctrl+u")
+	if m.msgOffset != 0 {
+		t.Errorf("msgOffset = %d, want 0", m.msgOffset)
+	}
+}
+
+func TestHalfPage_EmptyList_NoPanic(t *testing.T) {
+	m := Model{mode: ModeList, chats: nil, height: 12}
+	m, _ = m.handleKey("ctrl+d")
+	if m.selected != 0 {
+		t.Errorf("selected = %d, want 0", m.selected)
+	}
+}
+
 func TestHandleKey_I_EntersInsertFromConversation(t *testing.T) {
 	m := Model{mode: ModeConversation, currentChatID: "a"}
 	m2, _ := m.handleKey("i")

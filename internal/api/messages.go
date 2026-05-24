@@ -35,6 +35,7 @@ func mapMessage(m shared.Message) Message {
 		Text:       renderText(m),
 		Timestamp:  m.Timestamp,
 		IsFromMe:   m.IsSender,
+		IsUnread:   m.IsUnread,
 	}
 }
 
