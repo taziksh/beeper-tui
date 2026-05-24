@@ -33,11 +33,18 @@ func (m Model) renderList() string {
 	var b strings.Builder
 	b.WriteString("CHATS\n")
 	vr := m.visibleRows()
-	end := m.offset + vr
-	if end > len(m.chats) {
-		end = len(m.chats)
-	}
-	for i := m.offset; i < end; i++ {
+	lowStart := lowPriorityStart(m.chats)
+	rows := 0
+	for i := m.offset; i < len(m.chats) && rows < vr; i++ {
+		// Emit the section divider once, just before the first low-priority chat
+		// (only when there's a normal section above it to divide from).
+		if i == lowStart && lowStart > 0 {
+			b.WriteString(lowPriorityDivider(m.width) + "\n")
+			rows++
+			if rows >= vr {
+				break
+			}
+		}
 		c := m.chats[i]
 		// base carries selection (bold); accent adds the unread color on top, so
 		// a selected unread row renders both bold AND colored.
@@ -60,6 +67,7 @@ func (m Model) renderList() string {
 			accent.Render(fmt.Sprintf("%4d", c.Unread)) +
 			base.Render("  "+c.Title)
 		b.WriteString(line + "\n")
+		rows++
 	}
 	b.WriteString(m.statusBar())
 	return b.String()
@@ -142,4 +150,15 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n]
+}
+
+// lowPriorityDivider is the full-width separator that introduces the bottom
+// section of muted/low-priority chats.
+func lowPriorityDivider(w int) string {
+	const label = "─── low priority "
+	pad := w - len([]rune(label))
+	if pad < 0 {
+		return label
+	}
+	return label + strings.Repeat("─", pad)
 }

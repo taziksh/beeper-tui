@@ -37,11 +37,27 @@ func TestSortChats_MutedAndLowPriorityDoNotFloat(t *testing.T) {
 	got := []string{chats[0].ID, chats[1].ID, chats[2].ID, chats[3].ID}
 	// Only normalUnread is an "active" unread, so it floats to the top despite
 	// being oldest. The rest sort purely by recency.
-	want := []string{"normalUnread", "mutedUnread", "normalRead", "lowPrioUnread"}
+	want := []string{"normalUnread", "normalRead", "mutedUnread", "lowPrioUnread"}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("sortChats order = %v, want %v", got, want)
 		}
+	}
+}
+
+func TestLowPriorityStart(t *testing.T) {
+	chats := []api.Chat{
+		{ID: "a", Unread: 1},
+		{ID: "b", Unread: 0},
+		{ID: "c", Muted: true},
+		{ID: "d", LowPriority: true},
+	}
+	if got := lowPriorityStart(chats); got != 2 {
+		t.Errorf("lowPriorityStart = %d, want 2", got)
+	}
+	none := []api.Chat{{ID: "a"}, {ID: "b"}}
+	if got := lowPriorityStart(none); got != 2 {
+		t.Errorf("lowPriorityStart (none low-prio) = %d, want 2 (len)", got)
 	}
 }
 
