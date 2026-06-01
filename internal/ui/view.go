@@ -31,14 +31,20 @@ func (m Model) renderList() string {
 		return "Loading chats…\n"
 	}
 	var b strings.Builder
-	b.WriteString("CHATS\n")
+	if m.mode == ModeSearch {
+		b.WriteString("SEARCH /" + m.searchQuery + "\n")
+	} else {
+		b.WriteString("CHATS\n")
+	}
 	vr := m.visibleRows()
 	lowStart := lowPriorityStart(m.chats)
+	indexes := m.visibleChatIndexes()
 	rows := 0
-	for i := m.offset; i < len(m.chats) && rows < vr; i++ {
+	for pos := m.offset; pos < len(indexes) && rows < vr; pos++ {
+		i := indexes[pos]
 		// Emit the section divider once, just before the first low-priority chat
 		// (only when there's a normal section above it to divide from).
-		if i == lowStart && lowStart > 0 {
+		if m.mode != ModeSearch && i == lowStart && lowStart > 0 {
 			b.WriteString(lowPriorityDivider(m.width) + "\n")
 			rows++
 			if rows >= vr {
@@ -69,11 +75,17 @@ func (m Model) renderList() string {
 		b.WriteString(line + "\n")
 		rows++
 	}
+	if m.mode == ModeSearch && len(indexes) == 0 {
+		b.WriteString("No matching chats\n")
+	}
 	b.WriteString(m.statusBar())
 	return b.String()
 }
 
 func (m Model) statusBar() string {
+	if m.mode == ModeSearch {
+		return "SEARCH  type filter · enter open · esc clear"
+	}
 	return fmt.Sprintf("NORMAL  %d chats · j/k move · enter open · q quit", len(m.chats))
 }
 
@@ -132,7 +144,7 @@ func (m Model) convStatusBar() string {
 	if m.mode == ModeInsert {
 		return "INSERT  enter send · esc cancel"
 	}
-	return "NORMAL  j/k scroll · i reply · esc back · q quit"
+	return "NORMAL  j/k scroll · i reply · esc/q back"
 }
 
 // wrap word-wraps s to width w so long errors stay fully readable instead of

@@ -70,6 +70,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.mode == ModeInsert {
 			return m.handleInsertKey(msg.String(), msg.Text)
 		}
+		if m.mode == ModeSearch {
+			return m.handleSearchKey(msg.String(), msg.Text)
+		}
 		return m.handleKey(msg.String())
 	}
 	return m, nil

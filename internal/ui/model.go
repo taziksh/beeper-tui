@@ -11,6 +11,7 @@ const (
 	ModeList Mode = iota
 	ModeConversation
 	ModeInsert
+	ModeSearch
 )
 
 // Model holds all TUI state. bubbletea passes it by value through Update, so
@@ -34,6 +35,9 @@ type Model struct {
 	input       string
 	failedSends map[string]bool // local ids of optimistic sends that errored
 	localSeq    int             // mints local ids for optimistic messages
+
+	// chat search state
+	searchQuery string
 
 	width  int
 	height int

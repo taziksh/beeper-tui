@@ -113,6 +113,25 @@ func TestBackToList_ClearsConvErr(t *testing.T) {
 	}
 }
 
+func TestHandleKey_QInConversationReturnsToList(t *testing.T) {
+	m := Model{mode: ModeConversation, currentChatID: "a"}
+	m2, cmd := m.handleKey("q")
+	if cmd != nil {
+		t.Error("q in a conversation should not quit the app")
+	}
+	if m2.mode != ModeList {
+		t.Errorf("mode = %v, want ModeList", m2.mode)
+	}
+}
+
+func TestHandleKey_QInListQuits(t *testing.T) {
+	m := Model{mode: ModeList}
+	_, cmd := m.handleKey("q")
+	if cmd == nil {
+		t.Error("q in the chat list should still quit")
+	}
+}
+
 func TestHandleKey_Esc_AfterConvError_ReturnsToList(t *testing.T) {
 	m := Model{
 		mode: ModeConversation, width: 80, height: 24, currentChatID: "a",
@@ -210,6 +229,44 @@ func TestHalfPage_EmptyList_NoPanic(t *testing.T) {
 	m, _ = m.handleKey("ctrl+d")
 	if m.selected != 0 {
 		t.Errorf("selected = %d, want 0", m.selected)
+	}
+}
+
+func TestSearchFiltersChatsAndOpensSelection(t *testing.T) {
+	m := Model{
+		mode:   ModeList,
+		chats:  []api.Chat{{ID: "a", Title: "Alice"}, {ID: "b", Title: "Dev Team"}, {ID: "c", Title: "Carla"}},
+		height: 10,
+	}
+	m = m.startSearch()
+	m, _ = m.handleSearchKey("d", "d")
+	m, _ = m.handleSearchKey("e", "e")
+	if m.searchQuery != "de" {
+		t.Errorf("searchQuery = %q, want de", m.searchQuery)
+	}
+	if m.selected != 1 {
+		t.Errorf("selected = %d, want Dev Team index 1", m.selected)
+	}
+	m, cmd := m.handleSearchKey("enter", "")
+	if m.mode != ModeConversation || m.currentChatID != "b" {
+		t.Errorf("opened chat = mode %v id %q, want conversation b", m.mode, m.currentChatID)
+	}
+	if cmd == nil {
+		t.Error("enter on a search result should load the selected chat")
+	}
+}
+
+func TestSearchEscClearsFilter(t *testing.T) {
+	m := Model{mode: ModeSearch, searchQuery: "ali", chats: []api.Chat{{ID: "a", Title: "Alice"}}}
+	m, cmd := m.handleSearchKey("esc", "")
+	if cmd != nil {
+		t.Error("esc in search should not issue a command")
+	}
+	if m.mode != ModeList {
+		t.Errorf("mode = %v, want ModeList", m.mode)
+	}
+	if m.searchQuery != "" {
+		t.Errorf("searchQuery = %q, want empty", m.searchQuery)
 	}
 }
 

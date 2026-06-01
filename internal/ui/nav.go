@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -30,9 +31,11 @@ func (m Model) maxMsgOffset() int {
 
 func (m Model) cursorDown() Model {
 	switch m.mode {
-	case ModeList:
-		if len(m.chats) > 0 && m.selected < len(m.chats)-1 {
-			m.selected++
+	case ModeList, ModeSearch:
+		indexes := m.visibleChatIndexes()
+		pos := m.selectedVisibleChatPos(indexes)
+		if pos >= 0 && pos < len(indexes)-1 {
+			m.selected = indexes[pos+1]
 		}
 	case ModeConversation:
 		if m.msgOffset < m.maxMsgOffset() {
@@ -44,9 +47,11 @@ func (m Model) cursorDown() Model {
 
 func (m Model) cursorUp() Model {
 	switch m.mode {
-	case ModeList:
-		if m.selected > 0 {
-			m.selected--
+	case ModeList, ModeSearch:
+		indexes := m.visibleChatIndexes()
+		pos := m.selectedVisibleChatPos(indexes)
+		if pos > 0 {
+			m.selected = indexes[pos-1]
 		}
 	case ModeConversation:
 		if m.msgOffset > 0 {
@@ -65,17 +70,23 @@ func (m Model) halfPage(dir int) Model {
 		step = 1
 	}
 	switch m.mode {
-	case ModeList:
-		if len(m.chats) == 0 {
+	case ModeList, ModeSearch:
+		indexes := m.visibleChatIndexes()
+		if len(indexes) == 0 {
 			return m
 		}
-		m.selected += dir * step
-		if m.selected < 0 {
-			m.selected = 0
+		pos := m.selectedVisibleChatPos(indexes)
+		if pos < 0 {
+			pos = 0
 		}
-		if m.selected > len(m.chats)-1 {
-			m.selected = len(m.chats) - 1
+		pos += dir * step
+		if pos < 0 {
+			pos = 0
 		}
+		if pos > len(indexes)-1 {
+			pos = len(indexes) - 1
+		}
+		m.selected = indexes[pos]
 	case ModeConversation:
 		m.msgOffset += dir * step
 	}
@@ -84,8 +95,10 @@ func (m Model) halfPage(dir int) Model {
 
 func (m Model) jumpTop() Model {
 	switch m.mode {
-	case ModeList:
-		m.selected = 0
+	case ModeList, ModeSearch:
+		if indexes := m.visibleChatIndexes(); len(indexes) > 0 {
+			m.selected = indexes[0]
+		}
 	case ModeConversation:
 		m.msgOffset = 0
 	}
@@ -94,9 +107,9 @@ func (m Model) jumpTop() Model {
 
 func (m Model) jumpBottom() Model {
 	switch m.mode {
-	case ModeList:
-		if len(m.chats) > 0 {
-			m.selected = len(m.chats) - 1
+	case ModeList, ModeSearch:
+		if indexes := m.visibleChatIndexes(); len(indexes) > 0 {
+			m.selected = indexes[len(indexes)-1]
 		}
 	case ModeConversation:
 		m.msgOffset = m.maxMsgOffset()
@@ -107,13 +120,19 @@ func (m Model) jumpBottom() Model {
 // clampWindow keeps the active cursor visible within the scroll window.
 func (m Model) clampWindow() Model {
 	switch m.mode {
-	case ModeList:
+	case ModeList, ModeSearch:
 		vr := m.visibleRows()
-		if m.selected < m.offset {
-			m.offset = m.selected
+		indexes := m.visibleChatIndexes()
+		pos := m.selectedVisibleChatPos(indexes)
+		if pos < 0 {
+			m.offset = 0
+			return m
 		}
-		if m.selected >= m.offset+vr {
-			m.offset = m.selected - vr + 1
+		if pos < m.offset {
+			m.offset = pos
+		}
+		if pos >= m.offset+vr {
+			m.offset = pos - vr + 1
 		}
 		if m.offset < 0 {
 			m.offset = 0
@@ -127,6 +146,45 @@ func (m Model) clampWindow() Model {
 		}
 	}
 	return m
+}
+
+func (m Model) visibleChatIndexes() []int {
+	if m.mode != ModeSearch || m.searchQuery == "" {
+		indexes := make([]int, len(m.chats))
+		for i := range m.chats {
+			indexes[i] = i
+		}
+		return indexes
+	}
+	q := strings.ToLower(m.searchQuery)
+	indexes := make([]int, 0, len(m.chats))
+	for i, c := range m.chats {
+		if strings.Contains(strings.ToLower(c.Title), q) || strings.Contains(strings.ToLower(c.Network), q) {
+			indexes = append(indexes, i)
+		}
+	}
+	return indexes
+}
+
+func (m Model) selectedVisibleChatPos(indexes []int) int {
+	for pos, idx := range indexes {
+		if idx == m.selected {
+			return pos
+		}
+	}
+	return -1
+}
+
+func (m Model) selectFirstVisibleChat() Model {
+	indexes := m.visibleChatIndexes()
+	if len(indexes) == 0 {
+		m.offset = 0
+		return m
+	}
+	if m.selectedVisibleChatPos(indexes) < 0 {
+		m.selected = indexes[0]
+	}
+	return m.clampWindow()
 }
 
 // openSelected enters the selected chat: switches mode, resets scroll, and
@@ -148,7 +206,47 @@ func (m Model) openSelected() (Model, tea.Cmd) {
 func (m Model) backToList() Model {
 	m.mode = ModeList
 	m.convErr = nil
+	m.searchQuery = ""
 	return m
+}
+
+func (m Model) startSearch() Model {
+	m.mode = ModeSearch
+	m.searchQuery = ""
+	m.offset = 0
+	return m.selectFirstVisibleChat()
+}
+
+func (m Model) handleSearchKey(key, text string) (Model, tea.Cmd) {
+	switch key {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "esc", "q":
+		m.mode = ModeList
+		m.searchQuery = ""
+		m.offset = 0
+		return m.clampWindow(), nil
+	case "enter":
+		return m.openSelected()
+	case "backspace":
+		if r := []rune(m.searchQuery); len(r) > 0 {
+			m.searchQuery = string(r[:len(r)-1])
+		}
+		return m.selectFirstVisibleChat(), nil
+	case "j", "down":
+		return m.cursorDown(), nil
+	case "k", "up":
+		return m.cursorUp(), nil
+	case "ctrl+d":
+		return m.halfPage(1), nil
+	case "ctrl+u":
+		return m.halfPage(-1), nil
+	case "G":
+		return m.jumpBottom(), nil
+	default:
+		m.searchQuery += text
+		return m.selectFirstVisibleChat(), nil
+	}
 }
 
 // handleInsertKey processes keys while composing. `key` is the key name
@@ -205,8 +303,15 @@ func (m Model) handleKey(key string) (Model, tea.Cmd) {
 		m.pendingG = false
 	}
 	switch key {
-	case "ctrl+c", "q":
+	case "ctrl+c":
 		return m, tea.Quit
+	case "q":
+		if m.mode == ModeConversation {
+			return m.backToList(), nil
+		}
+		return m, tea.Quit
+	case "/":
+		return m.startSearch(), nil
 	case "j", "down":
 		return m.cursorDown(), nil
 	case "k", "up":
