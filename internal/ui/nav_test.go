@@ -132,22 +132,38 @@ func TestHandleKey_QInListQuits(t *testing.T) {
 	}
 }
 
-func TestHandleKey_Esc_AfterConvError_ReturnsToList(t *testing.T) {
+func TestHandleKey_EscInConversationDoesNothing(t *testing.T) {
 	m := Model{
 		mode: ModeConversation, width: 80, height: 24, currentChatID: "a",
 		chats:   []api.Chat{{ID: "a", Title: "Alice"}, {ID: "b", Title: "Dev Team"}},
 		convErr: errors.New("read error"),
 	}
 	m2, _ := m.handleKey("esc")
+	if m2.mode != ModeConversation {
+		t.Errorf("esc should stay in conversation mode, mode = %v", m2.mode)
+	}
+	out := m2.render()
+	if !strings.Contains(out, "read error") {
+		t.Errorf("esc should not clear the conversation error: %q", out)
+	}
+}
+
+func TestHandleKey_QAfterConvErrorReturnsToList(t *testing.T) {
+	m := Model{
+		mode: ModeConversation, width: 80, height: 24, currentChatID: "a",
+		chats:   []api.Chat{{ID: "a", Title: "Alice"}, {ID: "b", Title: "Dev Team"}},
+		convErr: errors.New("read error"),
+	}
+	m2, _ := m.handleKey("q")
 	if m2.mode != ModeList {
-		t.Errorf("esc should return to the list, mode = %v", m2.mode)
+		t.Errorf("q should return to the list, mode = %v", m2.mode)
 	}
 	out := m2.render()
 	if strings.Contains(out, "read error") {
 		t.Errorf("the error must not persist after returning to the list: %q", out)
 	}
 	if !strings.Contains(out, "Dev Team") {
-		t.Errorf("list should be visible after esc: %q", out)
+		t.Errorf("list should be visible after q: %q", out)
 	}
 }
 

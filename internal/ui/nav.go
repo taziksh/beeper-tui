@@ -339,11 +339,6 @@ func (m Model) handleKey(key string) (Model, tea.Cmd) {
 			return m.openSelected()
 		}
 		return m, nil
-	case "esc":
-		if m.mode == ModeConversation {
-			return m.backToList(), nil
-		}
-		return m, nil
 	}
 	return m, nil
 }
