@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -122,7 +123,7 @@ func (m Model) renderConversation() string {
 		if msg.IsFromMe {
 			who = "You"
 		}
-		ts := msg.Timestamp.Format("15:04")
+		ts := formatMessageTime(msg.Timestamp, time.Now())
 		marker := readGlyph
 		if msg.IsUnread {
 			marker = accentStyle.Render(msgMarker)
@@ -140,11 +141,32 @@ func (m Model) renderConversation() string {
 	return b.String()
 }
 
+func formatMessageTime(ts, now time.Time) string {
+	if ts.IsZero() {
+		return "--:--"
+	}
+	local := ts.In(now.Location())
+	today := now.Local()
+	if sameDay(local, today) {
+		return local.Format("15:04")
+	}
+	if local.Year() == today.Year() {
+		return local.Format("Jan 2 15:04")
+	}
+	return local.Format("2006-01-02 15:04")
+}
+
+func sameDay(a, b time.Time) bool {
+	ay, am, ad := a.Date()
+	by, bm, bd := b.Date()
+	return ay == by && am == bm && ad == bd
+}
+
 func (m Model) convStatusBar() string {
 	if m.mode == ModeInsert {
 		return "INSERT  enter send · esc cancel"
 	}
-	return "NORMAL  j/k scroll · i reply · esc/q back"
+	return "NORMAL  j/k scroll · i reply · q chats"
 }
 
 // wrap word-wraps s to width w so long errors stay fully readable instead of

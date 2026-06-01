@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/taziksh/beeper-tui/internal/api"
 )
@@ -12,6 +13,39 @@ func TestRender_LoadingChats(t *testing.T) {
 	m := Model{mode: ModeList, loadingChats: true, width: 80, height: 24}
 	if !strings.Contains(m.render(), "Loading") {
 		t.Errorf("loading view missing 'Loading': %q", m.render())
+	}
+}
+
+func TestFormatMessageTime_UsesLocalClockTime(t *testing.T) {
+	loc := time.FixedZone("PDT", -7*60*60)
+	ts := time.Date(2026, 6, 1, 19, 30, 0, 0, time.UTC)
+	now := time.Date(2026, 6, 1, 13, 0, 0, 0, loc)
+	if got := formatMessageTime(ts, now); got != "12:30" {
+		t.Errorf("formatMessageTime = %q, want local time 12:30", got)
+	}
+}
+
+func TestFormatMessageTime_IncludesDateForOlderMessages(t *testing.T) {
+	loc := time.FixedZone("PDT", -7*60*60)
+	ts := time.Date(2026, 5, 31, 19, 30, 0, 0, loc)
+	now := time.Date(2026, 6, 1, 13, 0, 0, 0, loc)
+	if got := formatMessageTime(ts, now); got != "May 31 19:30" {
+		t.Errorf("formatMessageTime = %q, want May 31 19:30", got)
+	}
+}
+
+func TestFormatMessageTime_IncludesYearForOlderYears(t *testing.T) {
+	loc := time.FixedZone("PDT", -7*60*60)
+	ts := time.Date(2025, 12, 31, 19, 30, 0, 0, loc)
+	now := time.Date(2026, 6, 1, 13, 0, 0, 0, loc)
+	if got := formatMessageTime(ts, now); got != "2025-12-31 19:30" {
+		t.Errorf("formatMessageTime = %q, want 2025-12-31 19:30", got)
+	}
+}
+
+func TestFormatMessageTime_ZeroTimestamp(t *testing.T) {
+	if got := formatMessageTime(time.Time{}, time.Now()); got != "--:--" {
+		t.Errorf("formatMessageTime = %q, want --:--", got)
 	}
 }
 
@@ -114,8 +148,8 @@ func TestRender_ConversationLoadError_ShownInBody(t *testing.T) {
 	if !strings.Contains(out, "Alice") {
 		t.Errorf("conversation header (chat title) should still show: %q", out)
 	}
-	if !strings.Contains(out, "esc") {
-		t.Errorf("status bar with esc hint should still show so the user can get out: %q", out)
+	if !strings.Contains(out, "q chats") {
+		t.Errorf("status bar with q hint should still show so the user can get out: %q", out)
 	}
 }
 
