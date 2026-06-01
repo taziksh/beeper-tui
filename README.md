@@ -9,10 +9,19 @@ A keyboard-driven terminal UI for [Beeper](https://beeper.com), built on top of 
 - Beeper Desktop running locally with the Developer API enabled (Settings → Developers → Beeper Desktop API). Requires Beeper Desktop v4.1.169+.
 - Go 1.22 or later (for `go install`).
 
-## Install (development)
+## Run From Source
+
+During development, prefer `make run`; it always executes the current checkout
+instead of an older installed binary.
 
 ```bash
-go install github.com/taziksh/beeper-tui/cmd/beeper-tui@latest
+make run
+```
+
+To refresh the installed `beeper-tui` command:
+
+```bash
+make install
 ```
 
 ## Configuration
