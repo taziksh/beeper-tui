@@ -3,6 +3,7 @@ package api_test
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -61,6 +62,83 @@ func TestListMessages_EncodesHashInChatID(t *testing.T) {
 	}
 }
 
+func TestListMessages_DecodesHTMLEntities(t *testing.T) {
+	// Message text arrives HTML-escaped from the API; the conversation view
+	// must render the decoded characters, not literal entities (bd-on8).
+	const escapedJSON = `{
+	  "items": [
+	    {"id":"m1","accountID":"acc","chatID":"chat-1","senderID":"u1","sortKey":"1","text":"she said &quot;hi &amp; bye&quot; &lt;3 it&#39;s fine","timestamp":"2026-05-19T10:00:00Z","isSender":false,"senderName":"Bob"}
+	  ],
+	  "hasMore": false, "oldestCursor": "o", "newestCursor": "n"
+	}`
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(escapedJSON))
+	})
+
+	msgs, err := client.ListMessages(context.Background(), "chat-1")
+	if err != nil {
+		t.Fatalf("ListMessages() error = %v", err)
+	}
+	want := `she said "hi & bye" <3 it's fine`
+	if msgs[0].Text != want {
+		t.Errorf("msgs[0].Text = %q, want %q", msgs[0].Text, want)
+	}
+}
+
+func TestListMessages_SubstitutesReactionSender(t *testing.T) {
+	// Reaction messages arrive with a {{sender}} placeholder; render the
+	// resolved sender name, and "You" for the authenticated user's own
+	// reactions (bd-qea).
+	const reactionsJSON = `{
+	  "items": [
+	    {"id":"r1","accountID":"acc","chatID":"chat-1","senderID":"u1","sortKey":"1","type":"REACTION","text":"{{sender}} loved \"dinner?\"","timestamp":"2026-05-19T10:00:00Z","isSender":false,"senderName":"Bob"},
+	    {"id":"r2","accountID":"acc","chatID":"chat-1","senderID":"me","sortKey":"2","type":"REACTION","text":"{{sender}} laughed at \"dinner?\"","timestamp":"2026-05-19T10:01:00Z","isSender":true,"senderName":"Me"}
+	  ],
+	  "hasMore": false, "oldestCursor": "o", "newestCursor": "n"
+	}`
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(reactionsJSON))
+	})
+
+	msgs, err := client.ListMessages(context.Background(), "chat-1")
+	if err != nil {
+		t.Fatalf("ListMessages() error = %v", err)
+	}
+	if want := `Bob loved "dinner?"`; msgs[0].Text != want {
+		t.Errorf("msgs[0].Text = %q, want %q", msgs[0].Text, want)
+	}
+	if want := `You laughed at "dinner?"`; msgs[1].Text != want {
+		t.Errorf("msgs[1].Text = %q, want %q", msgs[1].Text, want)
+	}
+}
+
+func TestListMessages_MapsIsUnread(t *testing.T) {
+	const json = `{
+	  "items": [
+	    {"id":"m1","accountID":"acc","chatID":"chat-1","senderID":"u1","sortKey":"1","text":"old","timestamp":"2026-05-19T10:00:00Z","isSender":false,"senderName":"Bob","isUnread":false},
+	    {"id":"m2","accountID":"acc","chatID":"chat-1","senderID":"u1","sortKey":"2","text":"new","timestamp":"2026-05-19T10:01:00Z","isSender":false,"senderName":"Bob","isUnread":true}
+	  ],
+	  "hasMore": false, "oldestCursor": "o", "newestCursor": "n"
+	}`
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(json))
+	})
+
+	msgs, err := client.ListMessages(context.Background(), "chat-1")
+	if err != nil {
+		t.Fatalf("ListMessages() error = %v", err)
+	}
+	if msgs[0].IsUnread {
+		t.Error("msgs[0].IsUnread = true, want false")
+	}
+	if !msgs[1].IsUnread {
+		t.Error("msgs[1].IsUnread = false, want true")
+	}
+}
+
 func TestListMessages_SortsOldestFirst(t *testing.T) {
 	// Items deliberately newest-first in the payload; output must be oldest-first.
 	const reversedJSON = `{
@@ -84,5 +162,48 @@ func TestListMessages_SortsOldestFirst(t *testing.T) {
 	}
 	if msgs[0].Text != "older" || msgs[1].Text != "newer" {
 		t.Errorf("order = [%q, %q], want [older, newer]", msgs[0].Text, msgs[1].Text)
+	}
+}
+
+func TestSearchMessages_UsesQueryAndMapsResults(t *testing.T) {
+	var gotQuery string
+	var gotLimit string
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/messages/search" {
+			t.Errorf("path = %q, want /v1/messages/search", r.URL.Path)
+		}
+		gotQuery = r.URL.Query().Get("query")
+		gotLimit = r.URL.Query().Get("limit")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+		  "items": [
+		    {"id":"m1","accountID":"acc","chatID":"chat-1","senderID":"u1","sortKey":"1","text":"Dinner at 7?","timestamp":"2026-05-19T10:00:00Z","isSender":false,"senderName":"Bob"},
+		    {"id":"m2","accountID":"acc","chatID":"chat-2","senderID":"me","sortKey":"2","text":"dinner moved","timestamp":"2026-05-19T10:01:00Z","isSender":true,"senderName":"Me"}
+		  ],
+		  "hasMore": false, "oldestCursor": "o", "newestCursor": "n"
+		}`))
+	})
+
+	results, err := client.SearchMessages(context.Background(), "dinner")
+	if err != nil {
+		t.Fatalf("SearchMessages() error = %v", err)
+	}
+	if gotQuery != "dinner" {
+		t.Errorf("query param = %q, want dinner", gotQuery)
+	}
+	if gotLimit != "20" {
+		t.Errorf("limit param = %q, want 20", gotLimit)
+	}
+	if len(results) != 2 {
+		t.Fatalf("got %d results, want 2", len(results))
+	}
+	if results[0].Message.ChatID != "chat-2" {
+		t.Errorf("results[0].ChatID = %q, want newest chat-2 first", results[0].Message.ChatID)
+	}
+	if !results[0].Message.IsFromMe {
+		t.Error("results[0].IsFromMe = false, want true")
+	}
+	if !strings.Contains(results[1].Message.Text, "Dinner") {
+		t.Errorf("results[1].Text = %q, want mapped text", results[1].Message.Text)
 	}
 }

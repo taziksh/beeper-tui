@@ -3,9 +3,13 @@ module github.com/taziksh/beeper-tui
 go 1.26.3
 
 require (
-	charm.land/bubbletea/v2 v2.0.6 // indirect
-	charm.land/lipgloss/v2 v2.0.3 // indirect
-	github.com/beeper/desktop-api-go/v5 v5.0.1 // indirect
+	charm.land/bubbletea/v2 v2.0.6
+	charm.land/lipgloss/v2 v2.0.3
+	github.com/beeper/desktop-api-go/v5 v5.0.1
+	github.com/coder/websocket v1.8.14
+)
+
+require (
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260416155717-489999b90468 // indirect
 	github.com/charmbracelet/x/ansi v0.11.7 // indirect

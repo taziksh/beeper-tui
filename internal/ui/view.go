@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -16,11 +17,13 @@ func (m Model) View() tea.View {
 
 func (m Model) render() string {
 	if m.err != nil {
-		return fmt.Sprintf("Error: %v\n", m.err)
+		return m.renderOnboarding()
 	}
 	switch m.mode {
 	case ModeConversation, ModeInsert:
 		return m.renderConversation()
+	case ModeSearch:
+		return m.renderSearch()
 	default:
 		return m.renderList()
 	}
@@ -30,34 +33,128 @@ func (m Model) renderList() string {
 	if m.loadingChats {
 		return "Loading chats…\n"
 	}
-	sel := lipgloss.NewStyle().Bold(true)
 	var b strings.Builder
-	b.WriteString("CHATS\n")
-	vr := m.visibleRows()
-	end := m.offset + vr
-	if end > len(m.chats) {
-		end = len(m.chats)
+	b.WriteString(m.tabBar() + "\n")
+	rows := m.listRows()
+	if m.previewOn {
+		rows = m.joinPreview(rows)
 	}
-	for i := m.offset; i < end; i++ {
-		c := m.chats[i]
-		mark := " "
-		if c.Unread > 0 {
-			mark = "*"
-		}
-		line := fmt.Sprintf("%s [%-10s] %4d  %s", mark, truncate(c.Network, 10), c.Unread, c.Title)
-		if i == m.selected {
-			line = sel.Render("> " + line)
-		} else {
-			line = "  " + line
-		}
-		b.WriteString(line + "\n")
+	for _, row := range rows {
+		b.WriteString(row + "\n")
 	}
 	b.WriteString(m.statusBar())
 	return b.String()
 }
 
+func (m Model) listRows() []string {
+	vr := m.visibleRows()
+	indexes := m.visibleChatIndexes()
+	rows := make([]string, 0, vr)
+	for pos := m.offset; pos < len(indexes) && len(rows) < vr; pos++ {
+		i := indexes[pos]
+		c := m.chats[i]
+		// base carries selection (bold); accent adds the unread color on top, so
+		// a selected unread row renders both bold AND colored.
+		base := lipgloss.NewStyle()
+		if i == m.selected {
+			base = base.Bold(true)
+		}
+		accent := base
+		mark := readGlyph
+		if c.Unread > 0 || c.MarkedUnread {
+			accent = accent.Foreground(accentColor)
+			mark = unreadGlyph
+		}
+		prefix := "  "
+		if i == m.selected {
+			prefix = "> "
+		}
+		line := base.Render(prefix) + accent.Render(mark) +
+			base.Render(" ") + networkGlyph(c.Network) + base.Render(" ") +
+			accent.Render(fmt.Sprintf("%4d", c.Unread)) +
+			base.Render("  "+c.Title)
+		rows = append(rows, line)
+	}
+	if len(indexes) == 0 {
+		rows = append(rows, "  (empty)")
+	}
+	return rows
+}
+
 func (m Model) statusBar() string {
-	return fmt.Sprintf("NORMAL  %d chats · j/k move · enter open · q quit", len(m.chats))
+	if m.archiveErr != nil {
+		return fmt.Sprintf("NORMAL  archive failed: %v", m.archiveErr)
+	}
+	if m.archivingChatID != "" {
+		return "NORMAL  working…"
+	}
+	archive := "a archive"
+	if m.tab == TabArchive {
+		archive = "a unarchive"
+	}
+	return fmt.Sprintf("NORMAL  %sh/l tab · j/k move · enter open · p preview · %s · / search · q quit", m.connStatus(), archive)
+}
+
+// renderOnboarding is the full-screen state when the chat list cannot load,
+// pointing at the Desktop API setup steps instead of trapping the user in a
+// bare error.
+func (m Model) renderOnboarding() string {
+	var b strings.Builder
+	b.WriteString("Can't reach Beeper Desktop.\n\n")
+	b.WriteString("  1. Open Beeper Desktop and keep it running\n")
+	b.WriteString("  2. Settings → Developers → enable the Desktop API\n")
+	b.WriteString("  3. export BEEPER_ACCESS_TOKEN=<your token>\n\n")
+	b.WriteString(wrap(fmt.Sprintf("Error: %v", m.err), m.width) + "\n\n")
+	b.WriteString("r retry · ctrl+c quit\n")
+	return b.String()
+}
+
+func (m Model) renderSearch() string {
+	var b strings.Builder
+	b.WriteString("SEARCH /" + m.searchQuery + "\n")
+	if m.searchErr != nil {
+		b.WriteString(wrap(fmt.Sprintf("Error searching messages: %v", m.searchErr), m.width) + "\n")
+		b.WriteString(m.searchStatusBar())
+		return b.String()
+	}
+	if m.searchLoading {
+		b.WriteString("Searching messages…\n")
+		b.WriteString(m.searchStatusBar())
+		return b.String()
+	}
+	vr := m.visibleRows()
+	rows := 0
+	for i := m.searchOffset; i < len(m.searchResults) && rows < vr; i++ {
+		result := m.searchResults[i]
+		msg := result.Message
+		prefix := "  "
+		if i == m.searchSelected {
+			prefix = "> "
+		}
+		who := msg.SenderName
+		if msg.IsFromMe {
+			who = "You"
+		}
+		line := fmt.Sprintf("%s[%s] %-12s %s",
+			prefix,
+			truncate(m.chatTitle(msg.ChatID), 18),
+			truncate(who, 12),
+			msg.Text,
+		)
+		b.WriteString(line + "\n")
+		rows++
+	}
+	if strings.TrimSpace(m.searchQuery) == "" {
+		b.WriteString("Type to search messages\n")
+	} else if len(m.searchResults) == 0 {
+		b.WriteString("No matching messages\n")
+	}
+	b.WriteString(m.searchStatusBar())
+	return b.String()
+}
+
+func (m Model) searchStatusBar() string {
+	return "SEARCH  type query · enter open chat · esc clear"
 }
 
 func (m Model) chatTitle(id string) string {
@@ -93,8 +190,12 @@ func (m Model) renderConversation() string {
 		if msg.IsFromMe {
 			who = "You"
 		}
-		ts := msg.Timestamp.Format("15:04")
-		line := fmt.Sprintf("%s  %-12s  %s", ts, truncate(who, 12), msg.Text)
+		ts := formatMessageTime(msg.Timestamp, time.Now())
+		marker := readGlyph
+		if msg.IsUnread {
+			marker = accentStyle.Render(msgMarker)
+		}
+		line := fmt.Sprintf("%s %s  %-12s  %s", marker, ts, truncate(who, 12), msg.Text)
 		if m.failedSends[msg.ID] {
 			line += "  ! send failed"
 		}
@@ -107,11 +208,38 @@ func (m Model) renderConversation() string {
 	return b.String()
 }
 
+func formatMessageTime(ts, now time.Time) string {
+	if ts.IsZero() {
+		return "--:--"
+	}
+	local := ts.In(now.Location())
+	today := now.Local()
+	if sameDay(local, today) {
+		return local.Format("15:04")
+	}
+	if local.Year() == today.Year() {
+		return local.Format("Jan 2 15:04")
+	}
+	return local.Format("2006-01-02 15:04")
+}
+
+func sameDay(a, b time.Time) bool {
+	ay, am, ad := a.Date()
+	by, bm, bd := b.Date()
+	return ay == by && am == bm && ad == bd
+}
+
 func (m Model) convStatusBar() string {
 	if m.mode == ModeInsert {
 		return "INSERT  enter send · esc cancel"
 	}
-	return "NORMAL  j/k scroll · i reply · esc back · q quit"
+	if m.archiveErr != nil {
+		return fmt.Sprintf("NORMAL  archive failed: %v", m.archiveErr)
+	}
+	if m.archivingChatID != "" {
+		return "NORMAL  archiving…"
+	}
+	return "NORMAL  " + m.connStatus() + "j/k scroll · i reply · a archive · q chats"
 }
 
 // wrap word-wraps s to width w so long errors stay fully readable instead of
@@ -129,4 +257,25 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n]
+}
+
+// tabBar renders the tab row, bracketing the active tab and badging Unread and
+// Mentions with their counts.
+func (m Model) tabBar() string {
+	parts := make([]string, 0, len(tabOrder))
+	for _, t := range tabOrder {
+		text := t.label()
+		if t == TabUnread || t == TabMentions {
+			if n := t.count(m.chats); n > 0 {
+				text = fmt.Sprintf("%s·%d", text, n)
+			}
+		}
+		style := lipgloss.NewStyle()
+		if t == m.tab {
+			text = "[" + text + "]"
+			style = style.Bold(true).Foreground(accentColor)
+		}
+		parts = append(parts, style.Render(text))
+	}
+	return strings.Join(parts, "  ")
 }

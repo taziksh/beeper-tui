@@ -3,7 +3,9 @@ package api
 import (
 	"context"
 	"fmt"
+	"html"
 	"sort"
+	"strings"
 
 	beeperdesktopapi "github.com/beeper/desktop-api-go/v5"
 	"github.com/beeper/desktop-api-go/v5/shared"
@@ -25,13 +27,55 @@ func (c *Client) ListMessages(ctx context.Context, chatID string) ([]Message, er
 	return out, nil
 }
 
+// SearchMessages searches message contents across chats.
+func (c *Client) SearchMessages(ctx context.Context, query string) ([]MessageSearchResult, error) {
+	page, err := c.sdk.Messages.Search(ctx, beeperdesktopapi.MessageSearchParams{
+		Query: beeperdesktopapi.String(query),
+		Limit: beeperdesktopapi.Int(20),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("api: search messages: %w", err)
+	}
+	out := make([]MessageSearchResult, 0, len(page.Items))
+	for _, m := range page.Items {
+		out = append(out, MessageSearchResult{Message: mapMessage(m)})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Message.Timestamp.After(out[j].Message.Timestamp)
+	})
+	return out, nil
+}
+
+// MessageFromJSON decodes one message object from a WebSocket event entry,
+// which carries the same schema as REST messages.
+func MessageFromJSON(raw []byte) (Message, error) {
+	var m shared.Message
+	if err := m.UnmarshalJSON(raw); err != nil {
+		return Message{}, fmt.Errorf("api: decode event message: %w", err)
+	}
+	return mapMessage(m), nil
+}
+
 func mapMessage(m shared.Message) Message {
 	return Message{
 		ID:         m.ID,
 		ChatID:     m.ChatID,
 		SenderName: m.SenderName,
-		Text:       m.Text,
+		Text:       renderText(m),
 		Timestamp:  m.Timestamp,
 		IsFromMe:   m.IsSender,
+		IsUnread:   m.IsUnread,
 	}
+}
+
+// renderText decodes HTML entities and substitutes templated placeholders
+// (e.g. the {{sender}} used in reaction text) into the resolved sender name,
+// or "You" for the authenticated user's own messages.
+func renderText(m shared.Message) string {
+	sender := m.SenderName
+	if m.IsSender {
+		sender = "You"
+	}
+	text := strings.ReplaceAll(m.Text, "{{sender}}", sender)
+	return html.UnescapeString(text)
 }

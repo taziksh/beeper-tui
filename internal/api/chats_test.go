@@ -19,6 +19,7 @@ const singlePageChatsJSON = `{
       "id": "chat-1", "accountID": "acc-wa", "network": "WhatsApp",
       "title": "Hiking Group", "type": "group",
       "unreadCount": 82, "unreadMentionsCount": 0,
+      "isMuted": true, "isLowPriority": false,
       "lastActivity": "2026-05-19T12:00:00Z",
       "preview": {"id":"m0","accountID":"acc-wa","chatID":"chat-1","senderID":"u1","sortKey":"1","timestamp":"2026-05-19T12:00:00Z","text":"see you there"}
     },
@@ -101,6 +102,23 @@ func TestListChats_FollowsPagination(t *testing.T) {
 	}
 	if chats[0].ID != "a" || chats[1].ID != "b" {
 		t.Errorf("got IDs %q,%q want a,b", chats[0].ID, chats[1].ID)
+	}
+}
+
+func TestListChats_MapsMutedAndLowPriority(t *testing.T) {
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(singlePageChatsJSON))
+	})
+	chats, err := client.ListChats(context.Background())
+	if err != nil {
+		t.Fatalf("ListChats() error = %v", err)
+	}
+	if !chats[0].Muted {
+		t.Error("chats[0].Muted = false, want true")
+	}
+	if chats[0].LowPriority {
+		t.Error("chats[0].LowPriority = true, want false")
 	}
 }
 

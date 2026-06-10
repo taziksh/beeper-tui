@@ -113,22 +113,57 @@ func TestBackToList_ClearsConvErr(t *testing.T) {
 	}
 }
 
-func TestHandleKey_Esc_AfterConvError_ReturnsToList(t *testing.T) {
+func TestHandleKey_QInConversationReturnsToList(t *testing.T) {
+	m := Model{mode: ModeConversation, currentChatID: "a"}
+	m2, cmd := m.handleKey("q")
+	if cmd != nil {
+		t.Error("q in a conversation should not quit the app")
+	}
+	if m2.mode != ModeList {
+		t.Errorf("mode = %v, want ModeList", m2.mode)
+	}
+}
+
+func TestHandleKey_QInListQuits(t *testing.T) {
+	m := Model{mode: ModeList}
+	_, cmd := m.handleKey("q")
+	if cmd == nil {
+		t.Error("q in the chat list should still quit")
+	}
+}
+
+func TestHandleKey_EscInConversationDoesNothing(t *testing.T) {
 	m := Model{
 		mode: ModeConversation, width: 80, height: 24, currentChatID: "a",
 		chats:   []api.Chat{{ID: "a", Title: "Alice"}, {ID: "b", Title: "Dev Team"}},
 		convErr: errors.New("read error"),
 	}
 	m2, _ := m.handleKey("esc")
+	if m2.mode != ModeConversation {
+		t.Errorf("esc should stay in conversation mode, mode = %v", m2.mode)
+	}
+	out := m2.render()
+	if !strings.Contains(out, "read error") {
+		t.Errorf("esc should not clear the conversation error: %q", out)
+	}
+}
+
+func TestHandleKey_QAfterConvErrorReturnsToList(t *testing.T) {
+	m := Model{
+		mode: ModeConversation, width: 80, height: 24, currentChatID: "a",
+		chats:   []api.Chat{{ID: "a", Title: "Alice"}, {ID: "b", Title: "Dev Team"}},
+		convErr: errors.New("read error"),
+	}
+	m2, _ := m.handleKey("q")
 	if m2.mode != ModeList {
-		t.Errorf("esc should return to the list, mode = %v", m2.mode)
+		t.Errorf("q should return to the list, mode = %v", m2.mode)
 	}
 	out := m2.render()
 	if strings.Contains(out, "read error") {
 		t.Errorf("the error must not persist after returning to the list: %q", out)
 	}
 	if !strings.Contains(out, "Dev Team") {
-		t.Errorf("list should be visible after esc: %q", out)
+		t.Errorf("list should be visible after q: %q", out)
 	}
 }
 
@@ -163,6 +198,117 @@ func TestConversationScroll_JumpTopBottom(t *testing.T) {
 	}
 }
 
+func TestHalfPageDown_List(t *testing.T) {
+	// height 12 -> visibleRows 10 -> step 5.
+	m := Model{mode: ModeList, chats: chats(20), selected: 0, height: 12}
+	m, _ = m.handleKey("ctrl+d")
+	if m.selected != 5 {
+		t.Errorf("selected = %d, want 5", m.selected)
+	}
+}
+
+func TestHalfPageUp_List_ClampsTop(t *testing.T) {
+	m := Model{mode: ModeList, chats: chats(20), selected: 3, height: 12}
+	m, _ = m.handleKey("ctrl+u")
+	if m.selected != 0 {
+		t.Errorf("selected = %d, want clamped 0", m.selected)
+	}
+}
+
+func TestHalfPageDown_List_ClampsBottom(t *testing.T) {
+	m := Model{mode: ModeList, chats: chats(20), selected: 18, height: 12}
+	m, _ = m.handleKey("ctrl+d")
+	if m.selected != 19 {
+		t.Errorf("selected = %d, want clamped 19", m.selected)
+	}
+}
+
+func TestHalfPageDown_Conversation(t *testing.T) {
+	// height 7 -> visibleRows 5 -> step 2.
+	m := Model{mode: ModeConversation, messages: msgs(20), height: 7}
+	m, _ = m.handleKey("ctrl+d")
+	if m.msgOffset != 2 {
+		t.Errorf("msgOffset = %d, want 2", m.msgOffset)
+	}
+}
+
+func TestHalfPageUp_Conversation_ClampsTop(t *testing.T) {
+	m := Model{mode: ModeConversation, messages: msgs(20), height: 7, msgOffset: 1}
+	m, _ = m.handleKey("ctrl+u")
+	if m.msgOffset != 0 {
+		t.Errorf("msgOffset = %d, want 0", m.msgOffset)
+	}
+}
+
+func TestHalfPage_EmptyList_NoPanic(t *testing.T) {
+	m := Model{mode: ModeList, chats: nil, height: 12}
+	m, _ = m.handleKey("ctrl+d")
+	if m.selected != 0 {
+		t.Errorf("selected = %d, want 0", m.selected)
+	}
+}
+
+func TestSearchOpensSelectedMessageResultChat(t *testing.T) {
+	m := Model{
+		mode:  ModeSearch,
+		chats: []api.Chat{{ID: "a", Title: "Alice"}, {ID: "b", Title: "Dev Team"}, {ID: "c", Title: "Carla"}},
+		searchResults: []api.MessageSearchResult{
+			{Message: api.Message{ID: "m1", ChatID: "a", Text: "first"}},
+			{Message: api.Message{ID: "m2", ChatID: "b", Text: "second"}},
+		},
+		searchSelected: 1,
+		height:         10,
+	}
+	m, cmd := m.handleSearchKey("enter", "")
+	if m.mode != ModeConversation || m.currentChatID != "b" {
+		t.Errorf("opened chat = mode %v id %q, want conversation b", m.mode, m.currentChatID)
+	}
+	if m.selected != 1 {
+		t.Errorf("selected = %d, want matching chat index 1", m.selected)
+	}
+	if cmd == nil {
+		t.Error("enter on a message search result should load the selected chat")
+	}
+}
+
+func TestSearchEscClearsFilter(t *testing.T) {
+	m := Model{
+		mode:           ModeSearch,
+		searchQuery:    "ali",
+		searchResults:  []api.MessageSearchResult{{Message: api.Message{ID: "m1", ChatID: "a"}}},
+		searchSelected: 1,
+		searchLoading:  true,
+		chats:          []api.Chat{{ID: "a", Title: "Alice"}},
+	}
+	m, cmd := m.handleSearchKey("esc", "")
+	if cmd != nil {
+		t.Error("esc in search should not issue a command")
+	}
+	if m.mode != ModeList {
+		t.Errorf("mode = %v, want ModeList", m.mode)
+	}
+	if m.searchQuery != "" {
+		t.Errorf("searchQuery = %q, want empty", m.searchQuery)
+	}
+	if len(m.searchResults) != 0 || m.searchLoading {
+		t.Errorf("search state not cleared: results=%d loading=%v", len(m.searchResults), m.searchLoading)
+	}
+}
+
+func TestSearchTypingStartsMessageSearch(t *testing.T) {
+	m := Model{mode: ModeSearch}
+	m, cmd := m.handleSearchKey("d", "d")
+	if m.searchQuery != "d" {
+		t.Errorf("searchQuery = %q, want d", m.searchQuery)
+	}
+	if !m.searchLoading {
+		t.Error("searchLoading = false, want true")
+	}
+	if cmd == nil {
+		t.Error("typing a search query should issue a message search command")
+	}
+}
+
 func TestHandleKey_I_EntersInsertFromConversation(t *testing.T) {
 	m := Model{mode: ModeConversation, currentChatID: "a"}
 	m2, _ := m.handleKey("i")
@@ -176,6 +322,28 @@ func TestHandleKey_I_IgnoredInList(t *testing.T) {
 	m2, _ := m.handleKey("i")
 	if m2.mode != ModeList {
 		t.Errorf("mode = %v, want ModeList (i is a no-op in the list)", m2.mode)
+	}
+}
+
+func TestHandleKey_A_ArchivesSelectedChat(t *testing.T) {
+	m := Model{mode: ModeList, chats: []api.Chat{{ID: "a"}, {ID: "b"}}, selected: 1}
+	m2, cmd := m.handleKey("a")
+	if m2.archivingChatID != "b" {
+		t.Errorf("archivingChatID = %q, want b", m2.archivingChatID)
+	}
+	if cmd == nil {
+		t.Error("archive should issue a command")
+	}
+}
+
+func TestHandleKey_A_ArchivesCurrentConversation(t *testing.T) {
+	m := Model{mode: ModeConversation, currentChatID: "a", chats: []api.Chat{{ID: "a"}}}
+	m2, cmd := m.handleKey("a")
+	if m2.archivingChatID != "a" {
+		t.Errorf("archivingChatID = %q, want a", m2.archivingChatID)
+	}
+	if cmd == nil {
+		t.Error("archive should issue a command")
 	}
 }
 

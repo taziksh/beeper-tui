@@ -20,15 +20,45 @@ func (c *Client) ListChats(ctx context.Context) ([]Chat, error) {
 	return out, nil
 }
 
+// GetChat fetches one chat by ID. The single-chat endpoint returns no preview
+// text, so Preview is empty and callers keep any value they already have.
+func (c *Client) GetChat(ctx context.Context, chatID string) (Chat, error) {
+	ch, err := c.sdk.Chats.Get(ctx, escapeChatID(chatID), beeperdesktopapi.ChatGetParams{})
+	if err != nil {
+		return Chat{}, fmt.Errorf("api: get chat %s: %w", chatID, err)
+	}
+	return Chat{
+		ID:           ch.ID,
+		AccountID:    ch.AccountID,
+		Network:      ch.Network,
+		Title:        ch.Title,
+		Type:         string(ch.Type),
+		Unread:       int(ch.UnreadCount),
+		Mentions:     int(ch.UnreadMentionsCount),
+		Muted:        ch.IsMuted,
+		LowPriority:  ch.IsLowPriority,
+		Pinned:       ch.IsPinned,
+		Archived:     ch.IsArchived,
+		MarkedUnread: ch.IsMarkedUnread,
+		LastActive:   ch.LastActivity,
+	}, nil
+}
+
 func mapChat(c beeperdesktopapi.ChatListResponse) Chat {
 	return Chat{
-		ID:         c.ID,
-		AccountID:  c.AccountID,
-		Network:    c.Network,
-		Title:      c.Title,
-		Type:       string(c.Type),
-		Unread:     int(c.UnreadCount),
-		LastActive: c.LastActivity,
-		Preview:    c.Preview.Text,
+		ID:           c.ID,
+		AccountID:    c.AccountID,
+		Network:      c.Network,
+		Title:        c.Title,
+		Type:         string(c.Type),
+		Unread:       int(c.UnreadCount),
+		Mentions:     int(c.UnreadMentionsCount),
+		Muted:        c.IsMuted,
+		LowPriority:  c.IsLowPriority,
+		Pinned:       c.IsPinned,
+		Archived:     c.IsArchived,
+		MarkedUnread: c.IsMarkedUnread,
+		LastActive:   c.LastActivity,
+		Preview:      c.Preview.Text,
 	}
 }
