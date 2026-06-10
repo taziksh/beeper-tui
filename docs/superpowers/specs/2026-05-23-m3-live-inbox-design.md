@@ -96,5 +96,26 @@ All rules run in the pure reducer as `(model, wsEventMsg) → model`.
 
 ## Open items confirmed during live testing
 
-- Exact JSON field names inside `message.upserted` `entries` and `chat.upserted` entries → align `ws/events.go` decoding with `api.Message`/`api.Chat` mapping.
+- Exact JSON field names inside `message.upserted` `entries` → align `ws/events.go` decoding with `api.Message`/`api.Chat` mapping.
 - Whether `chat.upserted` fires on read-elsewhere (expected) and carries the updated unread count.
+
+## Wire-format findings (2026-06-10, live testing during qbg.5)
+
+Confirmed against the real server; where these contradict the protocol sketch
+above, the wire wins:
+
+- **`ts` is a string, not an integer.** Strict integer decoding rejected every
+  real event frame (the client silently dropped all events until fixed).
+  `ws/events.go` now decodes `ts` leniently and never rejects an event over it.
+- **`chat.upserted` carries no `entries`** (~155B, envelope + IDs only), so
+  chat updates need a REST refetch or ID-only handling in qbg.12.
+  `message.upserted` does carry full entries.
+- The envelope also has an **`accountID`** field, and the server can emit
+  **`reaction.added` / `reaction.removed`** (seen in Beeper's TS adapter
+  types; we skip unknown types by design).
+- **Mark-read and archive/unarchive fire `chat.upserted`**, which lets
+  integration tests trigger events programmatically — see
+  `TestIntegration_LiveEventRoundTrip` (no manual message sending needed).
+- Beeper's own clients (CLI `watch`, chat adapter) send `subscriptions.set`
+  on socket open without waiting for `ready` and omit `requestID`; our
+  ready-then-set with `requestID` is also accepted and acked.
