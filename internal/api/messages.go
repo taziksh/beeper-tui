@@ -27,6 +27,25 @@ func (c *Client) ListMessages(ctx context.Context, chatID string) ([]Message, er
 	return out, nil
 }
 
+// SearchMessages searches message contents across chats.
+func (c *Client) SearchMessages(ctx context.Context, query string) ([]MessageSearchResult, error) {
+	page, err := c.sdk.Messages.Search(ctx, beeperdesktopapi.MessageSearchParams{
+		Query: beeperdesktopapi.String(query),
+		Limit: beeperdesktopapi.Int(20),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("api: search messages: %w", err)
+	}
+	out := make([]MessageSearchResult, 0, len(page.Items))
+	for _, m := range page.Items {
+		out = append(out, MessageSearchResult{Message: mapMessage(m)})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Message.Timestamp.After(out[j].Message.Timestamp)
+	})
+	return out, nil
+}
+
 func mapMessage(m shared.Message) Message {
 	return Message{
 		ID:         m.ID,

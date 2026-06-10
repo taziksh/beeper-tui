@@ -3,6 +3,7 @@ package api_test
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -161,5 +162,48 @@ func TestListMessages_SortsOldestFirst(t *testing.T) {
 	}
 	if msgs[0].Text != "older" || msgs[1].Text != "newer" {
 		t.Errorf("order = [%q, %q], want [older, newer]", msgs[0].Text, msgs[1].Text)
+	}
+}
+
+func TestSearchMessages_UsesQueryAndMapsResults(t *testing.T) {
+	var gotQuery string
+	var gotLimit string
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/messages/search" {
+			t.Errorf("path = %q, want /v1/messages/search", r.URL.Path)
+		}
+		gotQuery = r.URL.Query().Get("query")
+		gotLimit = r.URL.Query().Get("limit")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+		  "items": [
+		    {"id":"m1","accountID":"acc","chatID":"chat-1","senderID":"u1","sortKey":"1","text":"Dinner at 7?","timestamp":"2026-05-19T10:00:00Z","isSender":false,"senderName":"Bob"},
+		    {"id":"m2","accountID":"acc","chatID":"chat-2","senderID":"me","sortKey":"2","text":"dinner moved","timestamp":"2026-05-19T10:01:00Z","isSender":true,"senderName":"Me"}
+		  ],
+		  "hasMore": false, "oldestCursor": "o", "newestCursor": "n"
+		}`))
+	})
+
+	results, err := client.SearchMessages(context.Background(), "dinner")
+	if err != nil {
+		t.Fatalf("SearchMessages() error = %v", err)
+	}
+	if gotQuery != "dinner" {
+		t.Errorf("query param = %q, want dinner", gotQuery)
+	}
+	if gotLimit != "20" {
+		t.Errorf("limit param = %q, want 20", gotLimit)
+	}
+	if len(results) != 2 {
+		t.Fatalf("got %d results, want 2", len(results))
+	}
+	if results[0].Message.ChatID != "chat-2" {
+		t.Errorf("results[0].ChatID = %q, want newest chat-2 first", results[0].Message.ChatID)
+	}
+	if !results[0].Message.IsFromMe {
+		t.Error("results[0].IsFromMe = false, want true")
+	}
+	if !strings.Contains(results[1].Message.Text, "Dinner") {
+		t.Errorf("results[1].Text = %q, want mapped text", results[1].Message.Text)
 	}
 }

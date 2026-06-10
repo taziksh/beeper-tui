@@ -22,15 +22,19 @@ func (c *Client) ListChats(ctx context.Context) ([]Chat, error) {
 
 func mapChat(c beeperdesktopapi.ChatListResponse) Chat {
 	return Chat{
-		ID:         c.ID,
-		AccountID:  c.AccountID,
-		Network:    c.Network,
-		Title:      c.Title,
-		Type:       string(c.Type),
-		Unread:      int(c.UnreadCount),
-		Muted:       c.IsMuted,
-		LowPriority: c.IsLowPriority,
-		LastActive:  c.LastActivity,
-		Preview:    c.Preview.Text,
+		ID:           c.ID,
+		AccountID:    c.AccountID,
+		Network:      c.Network,
+		Title:        c.Title,
+		Type:         string(c.Type),
+		Unread:       int(c.UnreadCount),
+		Mentions:     int(c.UnreadMentionsCount),
+		Muted:        c.IsMuted,
+		LowPriority:  c.IsLowPriority,
+		Pinned:       c.IsPinned,
+		Archived:     c.IsArchived,
+		MarkedUnread: c.IsMarkedUnread,
+		LastActive:   c.LastActivity,
+		Preview:      c.Preview.Text,
 	}
 }
