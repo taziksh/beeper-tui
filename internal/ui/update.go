@@ -5,7 +5,7 @@ import (
 )
 
 func (m Model) Init() tea.Cmd {
-	return m.loadChatsCmd()
+	return tea.Batch(m.loadChatsCmd(), m.waitForWSEvent(), pollTick())
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -29,6 +29,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.previewLoad()
 	case previewLoadedMsg:
 		return m.applyPreviewLoaded(msg), nil
+	case wsEventMsg:
+		m, cmd := m.applyWSEvent(msg.event)
+		return m, tea.Batch(cmd, m.waitForWSEvent())
+	case chatRefreshedMsg:
+		return m.applyChatRefreshed(msg.chat), nil
+	case pollTickMsg:
+		return m.applyPollTick()
+	case messagesRefreshedMsg:
+		return m.applyMessagesRefreshed(msg), nil
 	case messagesLoadedMsg:
 		if msg.chatID == m.currentChatID {
 			m.messages = msg.messages

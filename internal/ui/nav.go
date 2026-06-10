@@ -516,6 +516,8 @@ func (m Model) handleKey(key string) (Model, tea.Cmd) {
 		return m, nil
 	case "p":
 		return m.togglePreview()
+	case "r":
+		return m.retryConnection()
 	case "i":
 		if m.mode == ModeConversation {
 			m.mode = ModeInsert

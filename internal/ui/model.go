@@ -1,6 +1,9 @@
 package ui
 
-import "github.com/taziksh/beeper-tui/internal/api"
+import (
+	"github.com/taziksh/beeper-tui/internal/api"
+	"github.com/taziksh/beeper-tui/internal/ws"
+)
 
 // Mode is the top-level UI state. INSERT (M2) and overlays (M1.5) slot in later.
 type Mode int
@@ -12,12 +15,30 @@ const (
 	ModeSearch
 )
 
+// ConnState is the live-events connection state shown in the status bar.
+// The zero value connIdle means no WebSocket client is attached and keeps the
+// status bar quiet.
+type ConnState int
+
+const (
+	connIdle ConnState = iota
+	connConnecting
+	connConnected
+	connDisconnected
+)
+
 // Model holds all TUI state. bubbletea passes it by value through Update, so
 // navigation methods use value receivers and return a new Model.
 type Model struct {
 	client *api.Client
+	events *ws.Client
 
 	mode Mode
+
+	// live-events connection state
+	conn          ConnState
+	connErr       error
+	everConnected bool // distinguishes a reconnect, which refetches, from first connect
 
 	// list state
 	chats    []api.Chat
@@ -63,6 +84,7 @@ type Model struct {
 }
 
 // New builds the initial model. The chat fetch happens in Init, not here.
-func New(client *api.Client) Model {
-	return Model{client: client, mode: ModeList, loadingChats: true, failedSends: map[string]bool{}}
+// events may be nil, which disables live updates.
+func New(client *api.Client, events *ws.Client) Model {
+	return Model{client: client, events: events, mode: ModeList, loadingChats: true, failedSends: map[string]bool{}}
 }

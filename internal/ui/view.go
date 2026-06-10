@@ -17,7 +17,7 @@ func (m Model) View() tea.View {
 
 func (m Model) render() string {
 	if m.err != nil {
-		return fmt.Sprintf("Error: %v\n", m.err)
+		return m.renderOnboarding()
 	}
 	switch m.mode {
 	case ModeConversation, ModeInsert:
@@ -92,7 +92,21 @@ func (m Model) statusBar() string {
 	if m.tab == TabArchive {
 		archive = "a unarchive"
 	}
-	return fmt.Sprintf("NORMAL  h/l tab · j/k move · enter open · p preview · %s · / search · q quit", archive)
+	return fmt.Sprintf("NORMAL  %sh/l tab · j/k move · enter open · p preview · %s · / search · q quit", m.connStatus(), archive)
+}
+
+// renderOnboarding is the full-screen state when the chat list cannot load,
+// pointing at the Desktop API setup steps instead of trapping the user in a
+// bare error.
+func (m Model) renderOnboarding() string {
+	var b strings.Builder
+	b.WriteString("Can't reach Beeper Desktop.\n\n")
+	b.WriteString("  1. Open Beeper Desktop and keep it running\n")
+	b.WriteString("  2. Settings → Developers → enable the Desktop API\n")
+	b.WriteString("  3. export BEEPER_ACCESS_TOKEN=<your token>\n\n")
+	b.WriteString(wrap(fmt.Sprintf("Error: %v", m.err), m.width) + "\n\n")
+	b.WriteString("r retry · ctrl+c quit\n")
+	return b.String()
 }
 
 func (m Model) renderSearch() string {
@@ -225,7 +239,7 @@ func (m Model) convStatusBar() string {
 	if m.archivingChatID != "" {
 		return "NORMAL  archiving…"
 	}
-	return "NORMAL  j/k scroll · i reply · a archive · q chats"
+	return "NORMAL  " + m.connStatus() + "j/k scroll · i reply · a archive · q chats"
 }
 
 // wrap word-wraps s to width w so long errors stay fully readable instead of

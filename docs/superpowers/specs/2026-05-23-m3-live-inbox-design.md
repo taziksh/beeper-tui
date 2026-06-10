@@ -119,3 +119,18 @@ above, the wire wins:
 - Beeper's own clients (CLI `watch`, chat adapter) send `subscriptions.set`
   on socket open without waiting for `ready` and omit `requestID`; our
   ready-then-set with `requestID` is also accepted and acked.
+- **iMessage emits no events at all.** Per-bridge probe
+  (`TestIntegration_BridgeEventMatrix`, mark-read trigger against one chat
+  per network): Beeper (Matrix), Discord, Facebook/Messenger, Instagram,
+  LinkedIn, Signal, Twitter/X and WhatsApp all emit; iMessage is silent —
+  no `message.upserted`, no `chat.upserted`. Confirmed twice with real
+  iMessage sends. Worth reporting upstream.
+
+## Polling backstop (added during qbg.12)
+
+Because of the iMessage gap, events alone cannot make the inbox dependable.
+`internal/ui/poll.go` refetches the chat list and the open conversation every
+30s, bounding staleness for silent bridges and any missed events. Background
+refreshes are silent on failure, preserve the reader's scroll position, and
+keep unconfirmed optimistic sends. Events still deliver instantly where
+emission works.

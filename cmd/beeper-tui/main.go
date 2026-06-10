@@ -9,6 +9,7 @@ import (
 	"github.com/taziksh/beeper-tui/internal/api"
 	"github.com/taziksh/beeper-tui/internal/config"
 	"github.com/taziksh/beeper-tui/internal/ui"
+	"github.com/taziksh/beeper-tui/internal/ws"
 )
 
 func main() {
@@ -23,7 +24,9 @@ func main() {
 	}
 
 	client := api.New(cfg)
-	if _, err := tea.NewProgram(ui.New(client)).Run(); err != nil {
+	events := ws.New(cfg)
+	defer events.Close()
+	if _, err := tea.NewProgram(ui.New(client, events)).Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "tui: %v\n", err)
 		os.Exit(1)
 	}

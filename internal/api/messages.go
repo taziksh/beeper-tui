@@ -46,6 +46,16 @@ func (c *Client) SearchMessages(ctx context.Context, query string) ([]MessageSea
 	return out, nil
 }
 
+// MessageFromJSON decodes one message object from a WebSocket event entry,
+// which carries the same schema as REST messages.
+func MessageFromJSON(raw []byte) (Message, error) {
+	var m shared.Message
+	if err := m.UnmarshalJSON(raw); err != nil {
+		return Message{}, fmt.Errorf("api: decode event message: %w", err)
+	}
+	return mapMessage(m), nil
+}
+
 func mapMessage(m shared.Message) Message {
 	return Message{
 		ID:         m.ID,
