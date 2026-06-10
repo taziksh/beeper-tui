@@ -26,14 +26,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.loadingChats = false
 		m = m.clampWindow()
-		return m, m.previewLoad()
+		m, saveCmd := m.maybeSaveCache()
+		return m, tea.Batch(m.previewLoad(), saveCmd)
 	case previewLoadedMsg:
 		return m.applyPreviewLoaded(msg), nil
 	case wsEventMsg:
 		m, cmd := m.applyWSEvent(msg.event)
 		return m, tea.Batch(cmd, m.waitForWSEvent())
 	case chatRefreshedMsg:
-		return m.applyChatRefreshed(msg.chat), nil
+		m = m.applyChatRefreshed(msg.chat)
+		return m.maybeSaveCache()
 	case pollTickMsg:
 		return m.applyPollTick()
 	case messagesRefreshedMsg:
@@ -96,6 +98,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.convErr = msg.err
 				m.loadingMsgs = false
 			}
+			return m, nil
+		}
+		// With chats already on screen (warm start, or a refetch after a
+		// reconnect), a failed list fetch must not replace the inbox with the
+		// onboarding screen. The poll loop keeps retrying.
+		if len(m.chats) > 0 {
+			m.loadingChats = false
 			return m, nil
 		}
 		m.err = msg.err

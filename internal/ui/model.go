@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"time"
+
 	"github.com/taziksh/beeper-tui/internal/api"
 	"github.com/taziksh/beeper-tui/internal/ws"
 )
@@ -39,6 +41,10 @@ type Model struct {
 	conn          ConnState
 	connErr       error
 	everConnected bool // distinguishes a reconnect, which refetches, from first connect
+
+	// warm-start cache state. An empty cachePath disables cache writes.
+	cachePath    string
+	cacheSavedAt time.Time
 
 	// list state
 	chats    []api.Chat

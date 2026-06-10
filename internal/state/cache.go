@@ -5,27 +5,22 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"time"
+
+	"github.com/taziksh/beeper-tui/internal/api"
 )
 
-const CurrentSchemaVersion = 1
+// CurrentSchemaVersion is 2: v1 stored a trimmed chat snapshot that predates
+// the tabbed inbox. Warm-start needs every field the list view reads, so the
+// cache now stores api.Chat directly.
+const CurrentSchemaVersion = 2
 
 var ErrCorruptCache = errors.New("state: cache file is corrupt")
 var ErrSchemaMismatch = errors.New("state: cache schema version does not match current")
 
 type Cache struct {
-	SchemaVersion      int            `json:"schema_version"`
-	LastSelectedChatID string         `json:"last_selected_chat_id"`
-	Chats              []ChatSnapshot `json:"chats"`
-}
-
-type ChatSnapshot struct {
-	ID       string    `json:"id"`
-	Name     string    `json:"name"`
-	Account  string    `json:"account"`
-	Unread   int       `json:"unread"`
-	LastTs   time.Time `json:"last_ts"`
-	LastBody string    `json:"last_body"`
+	SchemaVersion      int        `json:"schema_version"`
+	LastSelectedChatID string     `json:"last_selected_chat_id"`
+	Chats              []api.Chat `json:"chats"`
 }
 
 func Save(path string, c Cache) error {
