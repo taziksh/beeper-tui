@@ -1,0 +1,15 @@
+version: "2"
+
+# Based on golangci-lint's curated "standard" preset
+# (errcheck, govet, ineffassign, staticcheck, unused).
+linters:
+  default: standard
+  exclusions:
+    presets:
+      - std-error-handling
+      - common-false-positives
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

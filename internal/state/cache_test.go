@@ -16,16 +16,16 @@ func TestSave_WritesValidJSON(t *testing.T) {
 	path := filepath.Join(dir, "cache.json")
 
 	c := state.Cache{
-		SchemaVersion: state.CurrentSchemaVersion,
+		SchemaVersion:      state.CurrentSchemaVersion,
 		LastSelectedChatID: "chat-123",
 		Chats: []state.ChatSnapshot{
 			{
-				ID:        "chat-123",
-				Name:      "Sarah Kim",
-				Account:   "iMessage",
-				Unread:    3,
-				LastTs:    time.Date(2026, 5, 17, 10, 42, 0, 0, time.UTC),
-				LastBody:  "hey did you see the article",
+				ID:       "chat-123",
+				Name:     "Sarah Kim",
+				Account:  "iMessage",
+				Unread:   3,
+				LastTs:   time.Date(2026, 5, 17, 10, 42, 0, 0, time.UTC),
+				LastBody: "hey did you see the article",
 			},
 		},
 	}
