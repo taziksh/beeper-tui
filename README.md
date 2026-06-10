@@ -2,7 +2,7 @@
 
 A keyboard-driven terminal UI for [Beeper](https://beeper.com), built on top of the local Beeper Desktop API.
 
-You can read and reply to chats across all your networks today. Live updates over WebSocket are in progress.
+You can read and reply to chats across all your networks, with live updates as messages arrive.
 
 ## How It Works
 
@@ -10,8 +10,15 @@ You can read and reply to chats across all your networks today. Live updates ove
 
 The TUI talks to a locally-running Beeper Desktop on `localhost:23373`: HTTP requests for actions and queries, WebSocket events for live updates. Beeper Desktop handles the bridges and end-to-end encryption to the actual networks.
 
+### Live updates
+
+The inbox is driven by WebSocket events from Beeper Desktop. A 30-second REST poll backstops bridges that emit no events.
+
+As of June 2026, iMessage is the only bridge that emits no events, so iMessage chats can lag by up to 30 seconds. Beeper (Matrix), Discord, Facebook Messenger, Instagram, LinkedIn, Signal, WhatsApp, and X all update instantly.
+
 ## Features
 
+- Live inbox: WebSocket events with a 30s polling backstop
 - Tabbed inbox with network logos, unread float-to-top, and a separate section for muted/low-priority chats
 - Conversation view with reply support
 - Yazi-style preview pane (`p`)
@@ -58,7 +65,7 @@ export BEEPER_API_BASE_URL=http://localhost:23373
 
 - [x] Read-only triage
 - [x] Send/reply
-- [ ] Live inbox via WebSocket events
+- [x] Live inbox via WebSocket events
 - [ ] Search across chats and messages
 - [ ] Attachments, reactions, replies-to-message, threads, edits, deletes
 
