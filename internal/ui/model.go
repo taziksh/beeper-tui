@@ -1,8 +1,6 @@
 package ui
 
-import (
-	"github.com/taziksh/beeper-tui/internal/api"
-)
+import "github.com/taziksh/beeper-tui/internal/api"
 
 // Mode is the top-level UI state. INSERT (M2) and overlays (M1.5) slot in later.
 type Mode int
@@ -23,6 +21,7 @@ type Model struct {
 
 	// list state
 	chats    []api.Chat
+	tab      Tab // the selected tab
 	selected int
 	offset   int // first visible row in the list
 
@@ -37,7 +36,12 @@ type Model struct {
 	localSeq    int             // mints local ids for optimistic messages
 
 	// chat search state
-	searchQuery string
+	searchQuery    string
+	searchResults  []api.MessageSearchResult
+	searchSelected int
+	searchOffset   int
+	searchLoading  bool
+	searchErr      error
 
 	width  int
 	height int
@@ -46,6 +50,9 @@ type Model struct {
 	loadingMsgs  bool
 	err          error // fatal chat-list load error (full-screen)
 	convErr      error // conversation-load error, scoped to the conversation body
+	archiveErr   error // archive error, scoped to the current list/conversation status
+
+	archivingChatID string
 
 	pendingG bool // tracks a pending `g` for the `gg` motion
 }

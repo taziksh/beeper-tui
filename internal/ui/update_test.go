@@ -105,17 +105,17 @@ func TestUpdate_SendResultSuccess_NotMarked(t *testing.T) {
 	}
 }
 
-func TestUpdate_ChatsLoaded_SortsUnreadToTopAndPinsSelection(t *testing.T) {
+func TestUpdate_ChatsLoaded_SortsPinnedFirstAndPinsSelection(t *testing.T) {
 	t0 := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
 	// User had "b" selected before the refresh.
 	m := Model{loadingChats: true, chats: []api.Chat{{ID: "a"}, {ID: "b"}}, selected: 1}
 	got, _ := m.Update(chatsLoadedMsg{chats: []api.Chat{
-		{ID: "a", Unread: 0, LastActive: t0.Add(time.Hour)},
-		{ID: "b", Unread: 3, LastActive: t0},
+		{ID: "a", LastActive: t0.Add(time.Hour)},
+		{ID: "b", Pinned: true, LastActive: t0},
 	}})
 	gm := got.(Model)
 	if gm.chats[0].ID != "b" {
-		t.Errorf("chats[0].ID = %q, want b (unread floats up)", gm.chats[0].ID)
+		t.Errorf("chats[0].ID = %q, want b (pinned first)", gm.chats[0].ID)
 	}
 	if gm.chats[gm.selected].ID != "b" {
 		t.Errorf("selection landed on %q, want b (pinned by ID across re-sort)", gm.chats[gm.selected].ID)
@@ -164,5 +164,104 @@ func TestUpdate_WindowSizeReclamps(t *testing.T) {
 	}
 	if gm.msgOffset > gm.maxMsgOffset() {
 		t.Errorf("msgOffset %d exceeds max %d after resize", gm.msgOffset, gm.maxMsgOffset())
+	}
+}
+
+func TestUpdate_SearchLoadedIgnoresStaleQuery(t *testing.T) {
+	m := Model{mode: ModeSearch, searchQuery: "dinner", searchLoading: true}
+	updated, _ := m.Update(searchLoadedMsg{
+		query: "din",
+		results: []api.MessageSearchResult{
+			{Message: api.Message{ID: "m1", ChatID: "a", Text: "stale"}},
+		},
+	})
+	got := updated.(Model)
+	if len(got.searchResults) != 0 {
+		t.Errorf("stale search results were applied: %v", got.searchResults)
+	}
+	if !got.searchLoading {
+		t.Error("searchLoading = false after stale result, want true")
+	}
+}
+
+func TestUpdate_SearchLoadedAppliesCurrentQuery(t *testing.T) {
+	m := Model{mode: ModeSearch, searchQuery: "dinner", searchLoading: true}
+	updated, _ := m.Update(searchLoadedMsg{
+		query: "dinner",
+		results: []api.MessageSearchResult{
+			{Message: api.Message{ID: "m1", ChatID: "a", Text: "fresh"}},
+		},
+	})
+	got := updated.(Model)
+	if len(got.searchResults) != 1 {
+		t.Fatalf("got %d search results, want 1", len(got.searchResults))
+	}
+	if got.searchLoading {
+		t.Error("searchLoading = true, want false")
+	}
+}
+
+func TestUpdate_ArchiveResultSuccess_MovesChatToArchive(t *testing.T) {
+	m := Model{
+		mode:            ModeList,
+		tab:             TabInbox,
+		chats:           []api.Chat{{ID: "a"}, {ID: "b"}, {ID: "c"}},
+		selected:        1,
+		archivingChatID: "b",
+	}
+	updated, _ := m.Update(archiveResultMsg{chatID: "b", archived: true})
+	got := updated.(Model)
+	if got.archivingChatID != "" {
+		t.Errorf("archivingChatID = %q, want empty", got.archivingChatID)
+	}
+	if len(got.chats) != 3 {
+		t.Fatalf("chats len = %d, want 3 (archive flips a flag, not removes)", len(got.chats))
+	}
+	idx := chatIndexByID(got.chats, "b")
+	if !got.chats[idx].Archived {
+		t.Errorf("chat b Archived = false, want true")
+	}
+	if got.chats[got.selected].ID == "b" {
+		t.Errorf("selection stayed on archived chat b, which left the Inbox tab")
+	}
+}
+
+func TestUpdate_ArchiveResultSuccess_ReturnsConversationToList(t *testing.T) {
+	m := Model{
+		mode:            ModeConversation,
+		tab:             TabInbox,
+		currentChatID:   "b",
+		chats:           []api.Chat{{ID: "a"}, {ID: "b"}},
+		selected:        1,
+		messages:        []api.Message{{ID: "m1"}},
+		archivingChatID: "b",
+	}
+	updated, _ := m.Update(archiveResultMsg{chatID: "b", archived: true})
+	got := updated.(Model)
+	if got.mode != ModeList {
+		t.Errorf("mode = %v, want ModeList", got.mode)
+	}
+	if got.currentChatID != "" || len(got.messages) != 0 {
+		t.Errorf("conversation state not cleared: chat=%q messages=%d", got.currentChatID, len(got.messages))
+	}
+	idx := chatIndexByID(got.chats, "b")
+	if idx < 0 || !got.chats[idx].Archived {
+		t.Errorf("chat b should remain present and archived: %+v", got.chats)
+	}
+}
+
+func TestUpdate_ArchiveResultError_SetsArchiveErr(t *testing.T) {
+	err := errors.New("network down")
+	m := Model{mode: ModeList, chats: []api.Chat{{ID: "a"}}, archivingChatID: "a"}
+	updated, _ := m.Update(archiveResultMsg{chatID: "a", err: err})
+	got := updated.(Model)
+	if got.archiveErr == nil {
+		t.Fatal("archiveErr = nil, want error")
+	}
+	if len(got.chats) != 1 {
+		t.Errorf("chat was removed on archive error: %+v", got.chats)
+	}
+	if got.archivingChatID != "" {
+		t.Errorf("archivingChatID = %q, want empty", got.archivingChatID)
 	}
 }

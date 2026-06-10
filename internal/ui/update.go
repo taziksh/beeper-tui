@@ -40,6 +40,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case searchLoadedMsg:
+		if m.mode == ModeSearch && msg.query == m.searchQuery {
+			m.searchResults = msg.results
+			m.searchSelected = 0
+			m.searchOffset = 0
+			m.searchLoading = false
+			m.searchErr = nil
+		}
+		return m.clampWindow(), nil
 	case sendResultMsg:
 		if msg.err != nil {
 			if m.failedSends == nil {
@@ -48,7 +57,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.failedSends[msg.localID] = true
 		}
 		return m, nil
+	case archiveResultMsg:
+		if msg.chatID != m.archivingChatID {
+			return m, nil
+		}
+		m.archivingChatID = ""
+		if msg.err != nil {
+			m.archiveErr = msg.err
+			return m, nil
+		}
+		m.archiveErr = nil
+		return m.applyArchive(msg.chatID, msg.archived), nil
 	case errMsg:
+		if msg.searchQuery != "" {
+			if m.mode == ModeSearch && msg.searchQuery == m.searchQuery {
+				m.searchErr = msg.err
+				m.searchLoading = false
+			}
+			return m, nil
+		}
 		if msg.chatID != "" {
 			// Conversation-load error: scope it to the conversation body so the
 			// list stays reachable via q. Ignore errors for a stale chat.

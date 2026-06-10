@@ -203,25 +203,20 @@ func TestRender_UnreadMessageHasMarker(t *testing.T) {
 	}
 }
 
-func TestRender_LowPrioritySectionDivider(t *testing.T) {
-	m := Model{
-		mode: ModeList, width: 40, height: 24,
-		chats: []api.Chat{
-			{ID: "a", Network: "Signal", Title: "Alice", Unread: 1},
-			{ID: "b", Network: "WhatsApp", Title: "Muted Group", Muted: true, Unread: 9},
-		},
-		selected: 0,
+func TestRender_InboxTabHidesLowPriority(t *testing.T) {
+	chats := []api.Chat{
+		{ID: "a", Network: "Signal", Title: "Alice", Unread: 1},
+		{ID: "b", Network: "WhatsApp", Title: "Muted Group", Muted: true, Unread: 9},
 	}
-	out := m.render()
-	if !strings.Contains(out, "low priority") {
-		t.Fatalf("expected low-priority divider in output: %q", out)
+	inbox := Model{mode: ModeList, width: 40, height: 24, tab: TabInbox, chats: chats, selected: 0}
+	out := inbox.render()
+	if !strings.Contains(out, "Alice") || strings.Contains(out, "Muted Group") {
+		t.Errorf("Inbox tab should show Alice and hide Muted Group: %q", out)
 	}
-	// Divider sits after the normal chat and before the muted one.
-	ai := strings.Index(out, "Alice")
-	di := strings.Index(out, "low priority")
-	mi := strings.Index(out, "Muted Group")
-	if !(ai < di && di < mi) {
-		t.Errorf("order wrong: Alice@%d divider@%d Muted@%d (want Alice<divider<Muted)", ai, di, mi)
+	low := Model{mode: ModeList, width: 40, height: 24, tab: TabLowPriority, chats: chats, selected: 1}
+	out = low.render()
+	if !strings.Contains(out, "Muted Group") || strings.Contains(out, "Alice") {
+		t.Errorf("Low Priority tab should show Muted Group and hide Alice: %q", out)
 	}
 }
 
@@ -232,5 +227,36 @@ func TestRender_ConversationLoading(t *testing.T) {
 	}
 	if !strings.Contains(m.render(), "Loading") {
 		t.Errorf("expected loading text: %q", m.render())
+	}
+}
+
+func TestRender_SearchShowsMessageResults(t *testing.T) {
+	m := Model{
+		mode: ModeSearch, width: 80, height: 24,
+		searchQuery: "dinner",
+		chats:       []api.Chat{{ID: "a", Title: "Alice"}, {ID: "b", Title: "Dev Team"}},
+		searchResults: []api.MessageSearchResult{
+			{Message: api.Message{ID: "m1", ChatID: "b", SenderName: "Dana", Text: "Dinner moved to 7"}},
+		},
+	}
+	out := m.render()
+	if !strings.Contains(out, "Dev Team") || !strings.Contains(out, "Dana") || !strings.Contains(out, "Dinner moved to 7") {
+		t.Errorf("search output missing result context: %q", out)
+	}
+}
+
+func TestRender_ListShowsArchiveHint(t *testing.T) {
+	m := Model{mode: ModeList, width: 80, height: 24, chats: []api.Chat{{ID: "a", Title: "Alice"}}}
+	out := m.render()
+	if !strings.Contains(out, "a archive") {
+		t.Errorf("list status missing archive hint: %q", out)
+	}
+}
+
+func TestRender_ArchiveError(t *testing.T) {
+	m := Model{mode: ModeList, width: 80, height: 24, archiveErr: errors.New("network down")}
+	out := m.render()
+	if !strings.Contains(out, "archive failed") || !strings.Contains(out, "network down") {
+		t.Errorf("archive error missing from status: %q", out)
 	}
 }

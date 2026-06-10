@@ -22,6 +22,8 @@ func (m Model) render() string {
 	switch m.mode {
 	case ModeConversation, ModeInsert:
 		return m.renderConversation()
+	case ModeSearch:
+		return m.renderSearch()
 	default:
 		return m.renderList()
 	}
@@ -32,26 +34,12 @@ func (m Model) renderList() string {
 		return "Loading chats…\n"
 	}
 	var b strings.Builder
-	if m.mode == ModeSearch {
-		b.WriteString("SEARCH /" + m.searchQuery + "\n")
-	} else {
-		b.WriteString("CHATS\n")
-	}
+	b.WriteString(m.tabBar() + "\n")
 	vr := m.visibleRows()
-	lowStart := lowPriorityStart(m.chats)
 	indexes := m.visibleChatIndexes()
 	rows := 0
 	for pos := m.offset; pos < len(indexes) && rows < vr; pos++ {
 		i := indexes[pos]
-		// Emit the section divider once, just before the first low-priority chat
-		// (only when there's a normal section above it to divide from).
-		if m.mode != ModeSearch && i == lowStart && lowStart > 0 {
-			b.WriteString(lowPriorityDivider(m.width) + "\n")
-			rows++
-			if rows >= vr {
-				break
-			}
-		}
 		c := m.chats[i]
 		// base carries selection (bold); accent adds the unread color on top, so
 		// a selected unread row renders both bold AND colored.
@@ -61,7 +49,7 @@ func (m Model) renderList() string {
 		}
 		accent := base
 		mark := readGlyph
-		if c.Unread > 0 {
+		if c.Unread > 0 || c.MarkedUnread {
 			accent = accent.Foreground(accentColor)
 			mark = unreadGlyph
 		}
@@ -70,24 +58,79 @@ func (m Model) renderList() string {
 			prefix = "> "
 		}
 		line := base.Render(prefix) + accent.Render(mark) +
-			base.Render(fmt.Sprintf(" [%-10s] ", truncate(c.Network, 10))) +
+			base.Render(" ") + networkGlyph(c.Network) + base.Render(" ") +
 			accent.Render(fmt.Sprintf("%4d", c.Unread)) +
 			base.Render("  "+c.Title)
 		b.WriteString(line + "\n")
 		rows++
 	}
-	if m.mode == ModeSearch && len(indexes) == 0 {
-		b.WriteString("No matching chats\n")
+	if len(indexes) == 0 {
+		b.WriteString("  (empty)\n")
 	}
 	b.WriteString(m.statusBar())
 	return b.String()
 }
 
 func (m Model) statusBar() string {
-	if m.mode == ModeSearch {
-		return "SEARCH  type filter · enter open · esc clear"
+	if m.archiveErr != nil {
+		return fmt.Sprintf("NORMAL  archive failed: %v", m.archiveErr)
 	}
-	return fmt.Sprintf("NORMAL  %d chats · j/k move · enter open · q quit", len(m.chats))
+	if m.archivingChatID != "" {
+		return "NORMAL  working…"
+	}
+	archive := "a archive"
+	if m.tab == TabArchive {
+		archive = "a unarchive"
+	}
+	return fmt.Sprintf("NORMAL  h/l tab · j/k move · enter open · %s · / search · q quit", archive)
+}
+
+func (m Model) renderSearch() string {
+	var b strings.Builder
+	b.WriteString("SEARCH /" + m.searchQuery + "\n")
+	if m.searchErr != nil {
+		b.WriteString(wrap(fmt.Sprintf("Error searching messages: %v", m.searchErr), m.width) + "\n")
+		b.WriteString(m.searchStatusBar())
+		return b.String()
+	}
+	if m.searchLoading {
+		b.WriteString("Searching messages…\n")
+		b.WriteString(m.searchStatusBar())
+		return b.String()
+	}
+	vr := m.visibleRows()
+	rows := 0
+	for i := m.searchOffset; i < len(m.searchResults) && rows < vr; i++ {
+		result := m.searchResults[i]
+		msg := result.Message
+		prefix := "  "
+		if i == m.searchSelected {
+			prefix = "> "
+		}
+		who := msg.SenderName
+		if msg.IsFromMe {
+			who = "You"
+		}
+		line := fmt.Sprintf("%s[%s] %-12s %s",
+			prefix,
+			truncate(m.chatTitle(msg.ChatID), 18),
+			truncate(who, 12),
+			msg.Text,
+		)
+		b.WriteString(line + "\n")
+		rows++
+	}
+	if strings.TrimSpace(m.searchQuery) == "" {
+		b.WriteString("Type to search messages\n")
+	} else if len(m.searchResults) == 0 {
+		b.WriteString("No matching messages\n")
+	}
+	b.WriteString(m.searchStatusBar())
+	return b.String()
+}
+
+func (m Model) searchStatusBar() string {
+	return "SEARCH  type query · enter open chat · esc clear"
 }
 
 func (m Model) chatTitle(id string) string {
@@ -166,7 +209,13 @@ func (m Model) convStatusBar() string {
 	if m.mode == ModeInsert {
 		return "INSERT  enter send · esc cancel"
 	}
-	return "NORMAL  j/k scroll · i reply · q chats"
+	if m.archiveErr != nil {
+		return fmt.Sprintf("NORMAL  archive failed: %v", m.archiveErr)
+	}
+	if m.archivingChatID != "" {
+		return "NORMAL  archiving…"
+	}
+	return "NORMAL  j/k scroll · i reply · a archive · q chats"
 }
 
 // wrap word-wraps s to width w so long errors stay fully readable instead of
@@ -186,13 +235,23 @@ func truncate(s string, n int) string {
 	return s[:n]
 }
 
-// lowPriorityDivider is the full-width separator that introduces the bottom
-// section of muted/low-priority chats.
-func lowPriorityDivider(w int) string {
-	const label = "─── low priority "
-	pad := w - len([]rune(label))
-	if pad < 0 {
-		return label
+// tabBar renders the tab row, bracketing the active tab and badging Unread and
+// Mentions with their counts.
+func (m Model) tabBar() string {
+	parts := make([]string, 0, len(tabOrder))
+	for _, t := range tabOrder {
+		text := t.label()
+		if t == TabUnread || t == TabMentions {
+			if n := t.count(m.chats); n > 0 {
+				text = fmt.Sprintf("%s·%d", text, n)
+			}
+		}
+		style := lipgloss.NewStyle()
+		if t == m.tab {
+			text = "[" + text + "]"
+			style = style.Bold(true).Foreground(accentColor)
+		}
+		parts = append(parts, style.Render(text))
 	}
-	return label + strings.Repeat("─", pad)
+	return strings.Join(parts, "  ")
 }
