@@ -25,7 +25,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.selected = reselectByID(m.chats, selectedID)
 		}
 		m.loadingChats = false
-		return m.clampWindow(), nil
+		m = m.clampWindow()
+		return m, m.previewLoad()
+	case previewLoadedMsg:
+		return m.applyPreviewLoaded(msg), nil
 	case messagesLoadedMsg:
 		if msg.chatID == m.currentChatID {
 			m.messages = msg.messages
@@ -67,7 +70,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.archiveErr = nil
-		return m.applyArchive(msg.chatID, msg.archived), nil
+		m = m.applyArchive(msg.chatID, msg.archived)
+		return m, m.previewLoad()
 	case errMsg:
 		if msg.searchQuery != "" {
 			if m.mode == ModeSearch && msg.searchQuery == m.searchQuery {

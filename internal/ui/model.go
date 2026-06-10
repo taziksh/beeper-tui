@@ -25,6 +25,11 @@ type Model struct {
 	selected int
 	offset   int // first visible row in the list
 
+	// preview pane state
+	previewOn    bool
+	previewCache map[string][]api.Message // recent messages keyed by chat ID
+	previewErr   map[string]error
+
 	// conversation state
 	currentChatID string
 	messages      []api.Message

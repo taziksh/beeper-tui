@@ -480,32 +480,42 @@ func (m Model) handleKey(key string) (Model, tea.Cmd) {
 	case "/":
 		return m.startSearch(), nil
 	case "j", "down":
-		return m.cursorDown(), nil
+		m = m.cursorDown()
+		return m, m.previewLoad()
 	case "k", "up":
-		return m.cursorUp(), nil
+		m = m.cursorUp()
+		return m, m.previewLoad()
 	case "ctrl+d":
-		return m.halfPage(1), nil
+		m = m.halfPage(1)
+		return m, m.previewLoad()
 	case "ctrl+u":
-		return m.halfPage(-1), nil
+		m = m.halfPage(-1)
+		return m, m.previewLoad()
 	case "l", "right", "tab":
 		if m.mode == ModeList {
-			return m.cycleTab(1), nil
+			m = m.cycleTab(1)
+			return m, m.previewLoad()
 		}
 		return m, nil
 	case "h", "left", "shift+tab":
 		if m.mode == ModeList {
-			return m.cycleTab(-1), nil
+			m = m.cycleTab(-1)
+			return m, m.previewLoad()
 		}
 		return m, nil
 	case "G":
-		return m.jumpBottom(), nil
+		m = m.jumpBottom()
+		return m, m.previewLoad()
 	case "g":
 		if m.pendingG {
 			m.pendingG = false
-			return m.jumpTop(), nil
+			m = m.jumpTop()
+			return m, m.previewLoad()
 		}
 		m.pendingG = true
 		return m, nil
+	case "p":
+		return m.togglePreview()
 	case "i":
 		if m.mode == ModeConversation {
 			m.mode = ModeInsert

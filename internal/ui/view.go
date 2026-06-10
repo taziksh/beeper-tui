@@ -35,10 +35,22 @@ func (m Model) renderList() string {
 	}
 	var b strings.Builder
 	b.WriteString(m.tabBar() + "\n")
+	rows := m.listRows()
+	if m.previewOn {
+		rows = m.joinPreview(rows)
+	}
+	for _, row := range rows {
+		b.WriteString(row + "\n")
+	}
+	b.WriteString(m.statusBar())
+	return b.String()
+}
+
+func (m Model) listRows() []string {
 	vr := m.visibleRows()
 	indexes := m.visibleChatIndexes()
-	rows := 0
-	for pos := m.offset; pos < len(indexes) && rows < vr; pos++ {
+	rows := make([]string, 0, vr)
+	for pos := m.offset; pos < len(indexes) && len(rows) < vr; pos++ {
 		i := indexes[pos]
 		c := m.chats[i]
 		// base carries selection (bold); accent adds the unread color on top, so
@@ -61,14 +73,12 @@ func (m Model) renderList() string {
 			base.Render(" ") + networkGlyph(c.Network) + base.Render(" ") +
 			accent.Render(fmt.Sprintf("%4d", c.Unread)) +
 			base.Render("  "+c.Title)
-		b.WriteString(line + "\n")
-		rows++
+		rows = append(rows, line)
 	}
 	if len(indexes) == 0 {
-		b.WriteString("  (empty)\n")
+		rows = append(rows, "  (empty)")
 	}
-	b.WriteString(m.statusBar())
-	return b.String()
+	return rows
 }
 
 func (m Model) statusBar() string {
@@ -82,7 +92,7 @@ func (m Model) statusBar() string {
 	if m.tab == TabArchive {
 		archive = "a unarchive"
 	}
-	return fmt.Sprintf("NORMAL  h/l tab · j/k move · enter open · %s · / search · q quit", archive)
+	return fmt.Sprintf("NORMAL  h/l tab · j/k move · enter open · p preview · %s · / search · q quit", archive)
 }
 
 func (m Model) renderSearch() string {
