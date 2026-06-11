@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/taziksh/beeper-tui/internal/api"
 	"github.com/taziksh/beeper-tui/internal/config"
+	"github.com/taziksh/beeper-tui/internal/launch"
 	"github.com/taziksh/beeper-tui/internal/state"
 	"github.com/taziksh/beeper-tui/internal/ui"
 	"github.com/taziksh/beeper-tui/internal/ws"
@@ -22,6 +24,11 @@ func main() {
 	}
 	if cfg.Token == "" {
 		fmt.Fprintln(os.Stderr, "No BEEPER_ACCESS_TOKEN set. Enable the Desktop API in Beeper (Settings -> Developers -> Approved connections) and export a token.")
+		os.Exit(1)
+	}
+
+	if err := launch.EnsureRunning(context.Background(), cfg.BaseURL); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 
