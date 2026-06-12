@@ -15,6 +15,7 @@ const (
 	ModeConversation
 	ModeInsert
 	ModeSearch
+	ModeReact
 )
 
 // ConnState is the live-events connection state shown in the status bar.
@@ -51,6 +52,7 @@ type Model struct {
 	tab      Tab // the selected tab
 	selected int
 	offset   int // first visible row in the list
+	listPos  int // visible position when a chat was opened, restores the cursor on return
 
 	// preview pane state
 	previewOn    bool
@@ -61,6 +63,13 @@ type Model struct {
 	currentChatID string
 	messages      []api.Message
 	msgOffset     int // first visible message row
+	msgSelected   int // index of the cursor message
+
+	// react picker state (REACT mode)
+	reactInput   string
+	reactCandIdx int // selected fuzzy-search candidate, cycled with tab
+	reactErr     error
+	selfUsers    map[string]string // own user ID per account ID, for recognizing own reactions
 
 	// compose state (INSERT mode)
 	input       string

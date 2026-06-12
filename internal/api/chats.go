@@ -41,6 +41,8 @@ func (c *Client) GetChat(ctx context.Context, chatID string) (Chat, error) {
 		Archived:     ch.IsArchived,
 		MarkedUnread: ch.IsMarkedUnread,
 		LastActive:   ch.LastActivity,
+
+		AllowedReactions: ch.Capabilities.AllowedReactions,
 	}, nil
 }
 
@@ -60,5 +62,7 @@ func mapChat(c beeperdesktopapi.ChatListResponse) Chat {
 		MarkedUnread: c.IsMarkedUnread,
 		LastActive:   c.LastActivity,
 		Preview:      c.Preview.Text,
+
+		AllowedReactions: c.Capabilities.AllowedReactions,
 	}
 }

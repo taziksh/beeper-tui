@@ -86,34 +86,6 @@ func TestListMessages_DecodesHTMLEntities(t *testing.T) {
 	}
 }
 
-func TestListMessages_SubstitutesReactionSender(t *testing.T) {
-	// Reaction messages arrive with a {{sender}} placeholder; render the
-	// resolved sender name, and "You" for the authenticated user's own
-	// reactions (bd-qea).
-	const reactionsJSON = `{
-	  "items": [
-	    {"id":"r1","accountID":"acc","chatID":"chat-1","senderID":"u1","sortKey":"1","type":"REACTION","text":"{{sender}} loved \"dinner?\"","timestamp":"2026-05-19T10:00:00Z","isSender":false,"senderName":"Bob"},
-	    {"id":"r2","accountID":"acc","chatID":"chat-1","senderID":"me","sortKey":"2","type":"REACTION","text":"{{sender}} laughed at \"dinner?\"","timestamp":"2026-05-19T10:01:00Z","isSender":true,"senderName":"Me"}
-	  ],
-	  "hasMore": false, "oldestCursor": "o", "newestCursor": "n"
-	}`
-	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(reactionsJSON))
-	})
-
-	msgs, err := client.ListMessages(context.Background(), "chat-1")
-	if err != nil {
-		t.Fatalf("ListMessages() error = %v", err)
-	}
-	if want := `Bob loved "dinner?"`; msgs[0].Text != want {
-		t.Errorf("msgs[0].Text = %q, want %q", msgs[0].Text, want)
-	}
-	if want := `You laughed at "dinner?"`; msgs[1].Text != want {
-		t.Errorf("msgs[1].Text = %q, want %q", msgs[1].Text, want)
-	}
-}
-
 func TestListMessages_MapsIsUnread(t *testing.T) {
 	const json = `{
 	  "items": [
@@ -205,5 +177,58 @@ func TestSearchMessages_UsesQueryAndMapsResults(t *testing.T) {
 	}
 	if !strings.Contains(results[1].Message.Text, "Dinner") {
 		t.Errorf("results[1].Text = %q, want mapped text", results[1].Message.Text)
+	}
+}
+
+func TestListMessages_MapsReactions(t *testing.T) {
+	const body = `{
+  "items": [
+    {"id":"m1","accountID":"acc","chatID":"chat-1","senderID":"u1","sortKey":"1","text":"hey","timestamp":"2026-05-19T10:00:00Z","isSender":false,"senderName":"Bob",
+     "reactions":[
+       {"id":"u2-thumb","participantID":"u2","reactionKey":"👍","emoji":true},
+       {"id":"u3-smile","participantID":"u3","reactionKey":"smiling-face","emoji":false}
+     ]}
+  ],
+  "hasMore": false, "oldestCursor": "o", "newestCursor": "n"
+}`
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	})
+
+	msgs, err := client.ListMessages(context.Background(), "chat-1")
+	if err != nil {
+		t.Fatalf("ListMessages() error = %v", err)
+	}
+	if len(msgs) != 1 || len(msgs[0].Reactions) != 2 {
+		t.Fatalf("got %d messages with %v reactions, want 1 message with 2 reactions", len(msgs), msgs)
+	}
+	if r := msgs[0].Reactions[0]; r.Key != "👍" || !r.Emoji {
+		t.Errorf("Reactions[0] = %+v, want emoji 👍", r)
+	}
+	if r := msgs[0].Reactions[1]; r.Key != "smiling-face" || r.Emoji {
+		t.Errorf("Reactions[1] = %+v, want non-emoji smiling-face", r)
+	}
+}
+
+func TestListMessages_DropsReactionEvents(t *testing.T) {
+	const body = `{
+  "items": [
+    {"id":"m1","accountID":"acc","chatID":"chat-1","senderID":"u1","sortKey":"1","text":"hey","timestamp":"2026-05-19T10:00:00Z","isSender":false,"senderName":"Bob"},
+    {"id":"r1","accountID":"acc","chatID":"chat-1","senderID":"u2","sortKey":"2","text":"{{sender}} reacted 👍","timestamp":"2026-05-19T10:01:00Z","isSender":false,"senderName":"Eve","type":"REACTION"}
+  ],
+  "hasMore": false, "oldestCursor": "o", "newestCursor": "n"
+}`
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	})
+
+	msgs, err := client.ListMessages(context.Background(), "chat-1")
+	if err != nil {
+		t.Fatalf("ListMessages() error = %v", err)
+	}
+	if len(msgs) != 1 || msgs[0].ID != "m1" {
+		t.Errorf("msgs = %+v, want only the real message m1", msgs)
 	}
 }

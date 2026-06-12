@@ -42,8 +42,8 @@ func (m Model) cursorDown() Model {
 			m.searchSelected++
 		}
 	case ModeConversation:
-		if m.msgOffset < m.maxMsgOffset() {
-			m.msgOffset++
+		if m.msgSelected < len(m.messages)-1 {
+			m.msgSelected++
 		}
 	}
 	return m.clampWindow()
@@ -62,8 +62,8 @@ func (m Model) cursorUp() Model {
 			m.searchSelected--
 		}
 	case ModeConversation:
-		if m.msgOffset > 0 {
-			m.msgOffset--
+		if m.msgSelected > 0 {
+			m.msgSelected--
 		}
 	}
 	return m.clampWindow()
@@ -107,7 +107,7 @@ func (m Model) halfPage(dir int) Model {
 			m.searchSelected = len(m.searchResults) - 1
 		}
 	case ModeConversation:
-		m.msgOffset += dir * step
+		m.msgSelected += dir * step
 	}
 	return m.clampWindow()
 }
@@ -121,6 +121,7 @@ func (m Model) jumpTop() Model {
 	case ModeSearch:
 		m.searchSelected = 0
 	case ModeConversation:
+		m.msgSelected = 0
 		m.msgOffset = 0
 	}
 	return m.clampWindow()
@@ -137,6 +138,7 @@ func (m Model) jumpBottom() Model {
 			m.searchSelected = len(m.searchResults) - 1
 		}
 	case ModeConversation:
+		m.msgSelected = len(m.messages) - 1
 		m.msgOffset = m.maxMsgOffset()
 	}
 	return m.clampWindow()
@@ -185,11 +187,29 @@ func (m Model) clampWindow() Model {
 			m.searchOffset = 0
 		}
 	case ModeConversation:
+		if len(m.messages) == 0 {
+			m.msgSelected = 0
+			m.msgOffset = 0
+			return m
+		}
+		if m.msgSelected < 0 {
+			m.msgSelected = 0
+		}
+		if m.msgSelected > len(m.messages)-1 {
+			m.msgSelected = len(m.messages) - 1
+		}
 		if m.msgOffset > m.maxMsgOffset() {
 			m.msgOffset = m.maxMsgOffset()
 		}
 		if m.msgOffset < 0 {
 			m.msgOffset = 0
+		}
+		vr := m.visibleRows()
+		if m.msgSelected < m.msgOffset {
+			m.msgOffset = m.msgSelected
+		}
+		if m.msgSelected >= m.msgOffset+vr {
+			m.msgOffset = m.msgSelected - vr + 1
 		}
 	}
 	return m
@@ -260,6 +280,7 @@ func (m Model) openSelected() (Model, tea.Cmd) {
 		return m, nil
 	}
 	chat := m.chats[m.selected]
+	m.listPos = m.selectedVisibleChatPos(m.visibleChatIndexes())
 	m.mode = ModeConversation
 	m.currentChatID = chat.ID
 	m.messages = nil
@@ -274,11 +295,27 @@ func (m Model) backToList() Model {
 	m.mode = ModeList
 	m.convErr = nil
 	m.archiveErr = nil
+	m.reactErr = nil
 	m.searchQuery = ""
 	m.searchResults = nil
 	m.searchErr = nil
 	m.searchLoading = false
-	return m
+	// Reading a chat can drop it from the current tab (e.g. the Unread tab once
+	// mark-read lands), leaving the selection pointing at an invisible chat: no
+	// cursor and dead j/k. Land on the position the chat occupied instead, which
+	// for unread triage is the next unread chat.
+	indexes := m.visibleChatIndexes()
+	if m.selectedVisibleChatPos(indexes) < 0 && len(indexes) > 0 {
+		pos := m.listPos
+		if pos < 0 {
+			pos = 0
+		}
+		if pos > len(indexes)-1 {
+			pos = len(indexes) - 1
+		}
+		m.selected = indexes[pos]
+	}
+	return m.clampWindow()
 }
 
 // archiveSelected toggles the archived state of the selected chat.
@@ -399,6 +436,7 @@ func (m Model) openSelectedSearchResult() (Model, tea.Cmd) {
 		m.selected = idx
 	}
 	m.mode = ModeConversation
+	m.listPos = m.selectedVisibleChatPos(m.visibleChatIndexes())
 	m.currentChatID = chatID
 	m.messages = nil
 	m.msgOffset = 0
@@ -517,6 +555,9 @@ func (m Model) handleKey(key string) (Model, tea.Cmd) {
 	case "p":
 		return m.togglePreview()
 	case "r":
+		if m.mode == ModeConversation {
+			return m.openReactPicker(), nil
+		}
 		return m.retryConnection()
 	case "i":
 		if m.mode == ModeConversation {

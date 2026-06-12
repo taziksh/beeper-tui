@@ -260,3 +260,47 @@ func TestRender_ArchiveError(t *testing.T) {
 		t.Errorf("archive error missing from status: %q", out)
 	}
 }
+
+func TestFormatReactions_AggregatesByKey(t *testing.T) {
+	got := formatReactions([]api.Reaction{
+		{Key: "👍", Emoji: true},
+		{Key: "❤️", Emoji: true},
+		{Key: "👍", Emoji: true},
+	}, "")
+	if got != "👍 2  ❤️ 1" {
+		t.Errorf("formatReactions = %q, want \"👍 2  ❤️ 1\"", got)
+	}
+}
+
+func TestFormatReactions_NonEmojiFallback(t *testing.T) {
+	got := formatReactions([]api.Reaction{{Key: "smiling-face", Emoji: false}}, "")
+	if got != "[smiling-face] 1" {
+		t.Errorf("formatReactions = %q, want \"[smiling-face] 1\"", got)
+	}
+}
+
+func TestFormatReactions_Empty(t *testing.T) {
+	if got := formatReactions(nil, ""); got != "" {
+		t.Errorf("formatReactions = %q, want empty", got)
+	}
+}
+
+func TestRender_ConversationShowsReactions(t *testing.T) {
+	m := Model{
+		mode: ModeConversation, width: 80, height: 24,
+		currentChatID: "a",
+		chats:         []api.Chat{{ID: "a", Title: "Alice"}},
+		messages: []api.Message{
+			{ID: "m1", SenderName: "Alice", Text: "hey there",
+				Reactions: []api.Reaction{{Key: "👍", Emoji: true}, {Key: "👍", Emoji: true}}},
+			{ID: "m2", SenderName: "Me", Text: "hi back", IsFromMe: true},
+		},
+	}
+	out := m.render()
+	if !strings.Contains(out, "hey there  👍 2") {
+		t.Errorf("conversation missing reaction suffix: %q", out)
+	}
+	if strings.Contains(out, "hi back  👍") {
+		t.Errorf("reaction leaked onto message without reactions: %q", out)
+	}
+}

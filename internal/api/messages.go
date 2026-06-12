@@ -19,6 +19,11 @@ func (c *Client) ListMessages(ctx context.Context, chatID string) ([]Message, er
 	}
 	out := make([]Message, 0, len(page.Items))
 	for _, m := range page.Items {
+		// Reaction events double what Message.Reactions already carries;
+		// Desktop hides them too.
+		if m.Type == shared.MessageTypeReaction {
+			continue
+		}
 		out = append(out, mapMessage(m))
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -38,6 +43,9 @@ func (c *Client) SearchMessages(ctx context.Context, query string) ([]MessageSea
 	}
 	out := make([]MessageSearchResult, 0, len(page.Items))
 	for _, m := range page.Items {
+		if m.Type == shared.MessageTypeReaction {
+			continue
+		}
 		out = append(out, MessageSearchResult{Message: mapMessage(m)})
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -57,6 +65,10 @@ func MessageFromJSON(raw []byte) (Message, error) {
 }
 
 func mapMessage(m shared.Message) Message {
+	var reactions []Reaction
+	for _, r := range m.Reactions {
+		reactions = append(reactions, Reaction{Key: r.ReactionKey, Emoji: r.Emoji, ParticipantID: r.ParticipantID})
+	}
 	return Message{
 		ID:         m.ID,
 		ChatID:     m.ChatID,
@@ -65,6 +77,8 @@ func mapMessage(m shared.Message) Message {
 		Timestamp:  m.Timestamp,
 		IsFromMe:   m.IsSender,
 		IsUnread:   m.IsUnread,
+		IsReaction: m.Type == shared.MessageTypeReaction,
+		Reactions:  reactions,
 	}
 }
 

@@ -20,6 +20,7 @@ func TestApplyMessagesRefreshed_PreservesScrollPosition(t *testing.T) {
 		currentChatID: "a",
 		messages:      msgs(20),
 		msgOffset:     3,
+		msgSelected:   5,
 		height:        7,
 	}
 	m = m.applyMessagesRefreshed(messagesRefreshedMsg{chatID: "a", messages: msgs(21)})

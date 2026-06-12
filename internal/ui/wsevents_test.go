@@ -315,3 +315,26 @@ func TestStatusBar_ShowsConnectionState(t *testing.T) {
 		t.Errorf("statusBar() = %q, want quiet when connected", got)
 	}
 }
+
+func TestReactionEvent_NoRowNoUnreadBump_RefreshesOpenChat(t *testing.T) {
+	m := Model{
+		mode: ModeConversation, width: 80, height: 24,
+		currentChatID: "a",
+		chats:         []api.Chat{{ID: "a", Title: "A", Preview: "hello"}},
+		messages:      []api.Message{{ID: "m1", ChatID: "a", Text: "hello"}},
+	}
+	raw := []byte(`{"id":"r1","accountID":"acc","chatID":"a","senderID":"u2","sortKey":"2","text":"{{sender}} reacted 👍","timestamp":"2026-06-10T10:00:00Z","senderName":"Eve","type":"REACTION"}`)
+	m2, cmd := m.applyMessageUpserted(ws.Event{Type: "message.upserted", ChatID: "a", Entries: []json.RawMessage{raw}})
+	if len(m2.messages) != 1 {
+		t.Errorf("messages = %d, want 1; reaction event must not add a row", len(m2.messages))
+	}
+	if m2.chats[0].Unread != 0 {
+		t.Errorf("Unread = %d, want 0; reaction event must not bump unread", m2.chats[0].Unread)
+	}
+	if m2.chats[0].Preview != "hello" {
+		t.Errorf("Preview = %q, want unchanged", m2.chats[0].Preview)
+	}
+	if cmd == nil {
+		t.Error("reaction event for the open chat must refetch messages to update suffixes")
+	}
+}

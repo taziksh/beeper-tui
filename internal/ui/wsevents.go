@@ -103,6 +103,15 @@ func (m Model) applyMessageUpserted(e ws.Event) (Model, tea.Cmd) {
 		if msg.ChatID == "" {
 			msg.ChatID = e.ChatID
 		}
+		// A reaction event is not a timeline message: no row, no unread bump,
+		// no preview. It does mean the reacted message changed, so refetch the
+		// open conversation to update reaction suffixes live.
+		if msg.IsReaction {
+			if msg.ChatID == m.currentChatID && m.mode != ModeList {
+				cmds = append(cmds, m.refreshMessagesCmd(msg.ChatID))
+			}
+			continue
+		}
 		var cmd tea.Cmd
 		m, cmd = m.applyIncomingMessage(msg)
 		if cmd != nil {
@@ -170,6 +179,8 @@ func (m Model) upsertConversationMessage(msg api.Message, atBottom bool) Model {
 	}
 	m.messages = upsertMessage(m.messages, msg)
 	if atBottom {
+		// Follow the conversation: keep the cursor on the newest message.
+		m.msgSelected = len(m.messages) - 1
 		m.msgOffset = m.maxMsgOffset()
 	}
 	return m

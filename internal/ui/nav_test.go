@@ -227,8 +227,8 @@ func TestHalfPageDown_Conversation(t *testing.T) {
 	// height 7 -> visibleRows 5 -> step 2.
 	m := Model{mode: ModeConversation, messages: msgs(20), height: 7}
 	m, _ = m.handleKey("ctrl+d")
-	if m.msgOffset != 2 {
-		t.Errorf("msgOffset = %d, want 2", m.msgOffset)
+	if m.msgSelected != 2 {
+		t.Errorf("msgSelected = %d, want 2", m.msgSelected)
 	}
 }
 
@@ -418,5 +418,41 @@ func TestSendInput_EmptyIsNoOp(t *testing.T) {
 	}
 	if m2.mode != ModeInsert {
 		t.Errorf("mode = %v, want ModeInsert (stay composing on empty enter)", m2.mode)
+	}
+}
+
+func TestBackToList_ReadChatLeftUnreadTab_CursorOnNextUnread(t *testing.T) {
+	m := Model{
+		mode: ModeList, tab: TabUnread, width: 80, height: 24,
+		chats: []api.Chat{
+			{ID: "a", Title: "A", Unread: 1},
+			{ID: "b", Title: "B", Unread: 2},
+		},
+	}
+	m, _ = m.openSelected()
+	// Mark-read lands over WS while the chat is open; it leaves the Unread tab.
+	m = m.applyChatRefreshed(api.Chat{ID: "a", Title: "A", Unread: 0})
+	m = m.backToList()
+	if m.chats[m.selected].ID != "b" {
+		t.Errorf("selected = %s, want next unread chat b", m.chats[m.selected].ID)
+	}
+	if m.selectedVisibleChatPos(m.visibleChatIndexes()) < 0 {
+		t.Error("selection must be visible in the current tab after returning")
+	}
+}
+
+func TestBackToList_ChatStillVisible_CursorStays(t *testing.T) {
+	m := Model{
+		mode: ModeList, tab: TabInbox, width: 80, height: 24,
+		chats: []api.Chat{
+			{ID: "a", Title: "A", Unread: 1},
+			{ID: "b", Title: "B"},
+		},
+	}
+	m, _ = m.openSelected()
+	m = m.applyChatRefreshed(api.Chat{ID: "a", Title: "A", Unread: 0})
+	m = m.backToList()
+	if m.chats[m.selected].ID != "a" {
+		t.Errorf("selected = %s, want to stay on chat a", m.chats[m.selected].ID)
 	}
 }

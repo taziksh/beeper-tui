@@ -83,6 +83,7 @@ func (m Model) applyMessagesRefreshed(msg messagesRefreshedMsg) Model {
 	}
 	m.messages = merged
 	if atBottom {
+		m.msgSelected = len(m.messages) - 1
 		m.msgOffset = m.maxMsgOffset()
 	}
 	return m.clampWindow()

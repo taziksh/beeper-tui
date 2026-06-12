@@ -1,14 +1,20 @@
 package ui
 
 import (
+	"fmt"
+	"time"
+
 	tea "charm.land/bubbletea/v2"
 )
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.loadChatsCmd(), m.waitForWSEvent(), pollTick())
+	return tea.Batch(m.loadChatsCmd(), m.loadSelfUsersCmd(), m.waitForWSEvent(), pollTick())
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if debugLog != nil {
+		defer logSlow(fmt.Sprintf("update %T", msg), time.Now())
+	}
 	switch msg := msg.(type) {
 	case chatsLoadedMsg:
 		// Pin the user's selection across the re-sort by chat ID, so unread
@@ -48,8 +54,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// the viewport; with nothing unread, fall back to the bottom.
 			if u := firstUnreadIndex(m.messages); u >= 0 {
 				m.msgOffset = u
+				m.msgSelected = u
 				m = m.clampWindow()
 			} else {
+				m.msgSelected = len(m.messages) - 1
 				m.msgOffset = m.maxMsgOffset()
 			}
 		}
@@ -63,6 +71,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.searchErr = nil
 		}
 		return m.clampWindow(), nil
+	case selfUsersLoadedMsg:
+		m.selfUsers = msg.users
+		return m, nil
+	case reactResultMsg:
+		if msg.err != nil {
+			m.reactErr = msg.err
+			// Reload to roll back the optimistic reaction change.
+			if msg.chatID == m.currentChatID {
+				return m, m.loadMessagesCmd(msg.chatID)
+			}
+		}
+		return m, nil
 	case sendResultMsg:
 		if msg.err != nil {
 			if m.failedSends == nil {
@@ -121,6 +141,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.mode == ModeSearch {
 			return m.handleSearchKey(msg.String(), msg.Text)
+		}
+		if m.mode == ModeReact {
+			return m.handleReactKey(msg.String(), msg.Text)
 		}
 		return m.handleKey(msg.String())
 	}

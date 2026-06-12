@@ -7,6 +7,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"github.com/taziksh/beeper-tui/internal/api"
 )
 
 func (m Model) View() tea.View {
@@ -16,11 +18,14 @@ func (m Model) View() tea.View {
 }
 
 func (m Model) render() string {
+	if debugLog != nil {
+		defer logSlow("render", time.Now())
+	}
 	if m.err != nil {
 		return m.renderOnboarding()
 	}
 	switch m.mode {
-	case ModeConversation, ModeInsert:
+	case ModeConversation, ModeInsert, ModeReact:
 		return m.renderConversation()
 	case ModeSearch:
 		return m.renderSearch()
@@ -184,6 +189,7 @@ func (m Model) renderConversation() string {
 	if end > len(m.messages) {
 		end = len(m.messages)
 	}
+	self := m.selfUserID()
 	for i := m.msgOffset; i < end; i++ {
 		msg := m.messages[i]
 		who := msg.SenderName
@@ -195,7 +201,14 @@ func (m Model) renderConversation() string {
 		if msg.IsUnread {
 			marker = accentStyle.Render(msgMarker)
 		}
-		line := fmt.Sprintf("%s %s  %-12s  %s", marker, ts, truncate(who, 12), msg.Text)
+		prefix := "  "
+		if i == m.msgSelected {
+			prefix = "> "
+		}
+		line := fmt.Sprintf("%s%s %s  %-12s  %s", prefix, marker, ts, truncate(who, 12), msg.Text)
+		if r := formatReactions(msg.Reactions, self); r != "" {
+			line += "  " + r
+		}
 		if m.failedSends[msg.ID] {
 			line += "  ! send failed"
 		}
@@ -204,8 +217,70 @@ func (m Model) renderConversation() string {
 	if m.mode == ModeInsert {
 		b.WriteString("> " + m.input + "█\n")
 	}
+	if m.mode == ModeReact {
+		b.WriteString(m.reactPromptLine() + "\n")
+	}
 	b.WriteString(m.convStatusBar())
 	return b.String()
+}
+
+// reactPromptLine shows the numbered quick-pick slots, the free-typed query,
+// and its fuzzy-search matches with the tab-selected one bracketed.
+func (m Model) reactPromptLine() string {
+	parts := make([]string, 0, maxReactSlots)
+	for i, k := range m.reactSlots() {
+		parts = append(parts, fmt.Sprintf("%d %s", i+1, k))
+	}
+	line := "react: " + strings.Join(parts, "  ") + " · " + m.reactInput + "█"
+	cands := emojiCandidates(m.reactInput, maxEmojiCandidates)
+	if len(cands) == 0 {
+		return line
+	}
+	sel := m.reactCandIdx % len(cands)
+	marked := make([]string, len(cands))
+	for i, c := range cands {
+		if i == sel {
+			marked[i] = "[" + c + "]"
+		} else {
+			marked[i] = c
+		}
+	}
+	return line + " → " + strings.Join(marked, " ")
+}
+
+// formatReactions aggregates reactions into a compact suffix like "👍 2*  ❤️ 1",
+// in order of first appearance. The trailing * marks a reaction that includes
+// the user's own (selfID). Non-emoji keys render as a bracketed shortcode,
+// e.g. "[smiling-face] 1". Returns "" when there are no reactions.
+func formatReactions(reactions []api.Reaction, selfID string) string {
+	if len(reactions) == 0 {
+		return ""
+	}
+	counts := make(map[string]int, len(reactions))
+	mine := make(map[string]bool, len(reactions))
+	order := make([]string, 0, len(reactions))
+	for _, r := range reactions {
+		key := r.Key
+		if !r.Emoji {
+			key = "[" + key + "]"
+		}
+		if counts[key] == 0 {
+			order = append(order, key)
+		}
+		counts[key]++
+		if selfID != "" && r.ParticipantID == selfID {
+			mine[key] = true
+		}
+	}
+	parts := make([]string, 0, len(order))
+	for _, key := range order {
+		own := ""
+		if mine[key] {
+			own = "*"
+		}
+		parts = append(parts, fmt.Sprintf("%s %d%s", key, counts[key], own))
+	}
+	return strings.Join(parts, "  ")
 }
 
 func formatMessageTime(ts, now time.Time) string {
@@ -233,13 +308,19 @@ func (m Model) convStatusBar() string {
 	if m.mode == ModeInsert {
 		return "INSERT  enter send · esc cancel"
 	}
+	if m.mode == ModeReact {
+		return "REACT  1-9 toggle · type name · tab cycle · enter send · esc cancel"
+	}
 	if m.archiveErr != nil {
 		return fmt.Sprintf("NORMAL  archive failed: %v", m.archiveErr)
+	}
+	if m.reactErr != nil {
+		return fmt.Sprintf("NORMAL  react failed: %v", m.reactErr)
 	}
 	if m.archivingChatID != "" {
 		return "NORMAL  archiving…"
 	}
-	return "NORMAL  " + m.connStatus() + "j/k scroll · i reply · a archive · q chats"
+	return "NORMAL  " + m.connStatus() + "j/k move · r react · i reply · a archive · q chats"
 }
 
 // wrap word-wraps s to width w so long errors stay fully readable instead of
