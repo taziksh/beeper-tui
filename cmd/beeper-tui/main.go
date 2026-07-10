@@ -10,7 +10,6 @@ import (
 
 	"github.com/taziksh/beeper-tui/internal/api"
 	"github.com/taziksh/beeper-tui/internal/config"
-	"github.com/taziksh/beeper-tui/internal/identity"
 	"github.com/taziksh/beeper-tui/internal/launch"
 	"github.com/taziksh/beeper-tui/internal/state"
 	"github.com/taziksh/beeper-tui/internal/ui"
@@ -45,15 +44,7 @@ func main() {
 	}
 	cached, _ := state.Load(cachePath)
 
-	// Person cards are durable user data under the config dir (not the chat cache).
-	identsPath := filepath.Join(cfg.ConfigDir, identity.FileName)
-	idents, err := identity.Load(identsPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "identities: %v (continuing without person cards)\n", err)
-		idents = nil
-	}
-
-	final, err := tea.NewProgram(ui.New(client, events).WithCache(cached, cachePath).WithIdentities(idents)).Run()
+	final, err := tea.NewProgram(ui.New(client, events).WithCache(cached, cachePath)).Run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tui: %v\n", err)
 		os.Exit(1)

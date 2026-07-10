@@ -564,11 +564,6 @@ func (m Model) handleKey(key string) (Model, tea.Cmd) {
 			m.mode = ModeInsert
 		}
 		return m, nil
-	case "I":
-		if m.mode == ModeConversation || m.mode == ModeList {
-			return m.openIdentityCard(), nil
-		}
-		return m, nil
 	case "a":
 		return m.archiveSelected()
 	case "enter":

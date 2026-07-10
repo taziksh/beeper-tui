@@ -29,8 +29,6 @@ func (m Model) render() string {
 		return m.renderConversation()
 	case ModeSearch:
 		return m.renderSearch()
-	case ModeIdentity:
-		return m.renderIdentity()
 	default:
 		return m.renderList()
 	}
@@ -99,7 +97,7 @@ func (m Model) statusBar() string {
 	if m.tab == TabArchive {
 		archive = "a unarchive"
 	}
-	return fmt.Sprintf("NORMAL  %sh/l tab · j/k · enter open · I notes · p preview · %s · / search · q quit", m.connStatus(), archive)
+	return fmt.Sprintf("NORMAL  %sh/l tab · j/k move · enter open · p preview · %s · / search · q quit", m.connStatus(), archive)
 }
 
 // renderOnboarding is the full-screen state when the chat list cannot load,
@@ -322,7 +320,7 @@ func (m Model) convStatusBar() string {
 	if m.archivingChatID != "" {
 		return "NORMAL  archiving…"
 	}
-	return "NORMAL  " + m.connStatus() + "j/k · r react · i reply · I notes · a · q chats"
+	return "NORMAL  " + m.connStatus() + "j/k move · r react · i reply · a archive · q chats"
 }
 
 // wrap word-wraps s to width w so long errors stay fully readable instead of

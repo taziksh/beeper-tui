@@ -1,8 +1,10 @@
 # Identities (person cards) — design
 
-**bd epic:** `beeper-tui-dn0` (P2)  
+**bd epic:** `beeper-tui-dn0` (P2) — closed; UI stripped from beeper-tui  
 **Date:** 2026-07-09  
-**Status:** Phase A implemented (`I` notes card, local `identities.json`)
+**Status:** **Not in beeper-tui.** Person cards / notes belong in a separate
+app that uses the Beeper Desktop API. Phase A was prototyped then removed from
+the chat TUI (see `beeper-tui-371`). Keep this doc as design notes only.
 
 ## Problem
 

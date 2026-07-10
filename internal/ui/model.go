@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/taziksh/beeper-tui/internal/api"
-	"github.com/taziksh/beeper-tui/internal/identity"
 	"github.com/taziksh/beeper-tui/internal/ws"
 )
 
@@ -17,7 +16,6 @@ const (
 	ModeInsert
 	ModeSearch
 	ModeReact
-	ModeIdentity
 )
 
 // ConnState is the live-events connection state shown in the status bar.
@@ -86,19 +84,6 @@ type Model struct {
 	searchLoading  bool
 	searchErr      error
 
-	// identity (person card) state
-	idents       *identity.Store
-	idID         string // empty when creating
-	idName       string
-	idNotes      string
-	idFocus      int // idFocusName | idFocusNotes
-	idChatID     string
-	idAccountID  string
-	idPeerUserID string
-	idNetwork    string
-	idChatTitle  string
-	idReturnMode Mode
-	idErr        error
 
 	width  int
 	height int
@@ -120,9 +105,3 @@ func New(client *api.Client, events *ws.Client) Model {
 	return Model{client: client, events: events, mode: ModeList, loadingChats: true, failedSends: map[string]bool{}}
 }
 
-// WithIdentities attaches the local person-card store. A nil store disables
-// the identity card (I key becomes a no-op).
-func (m Model) WithIdentities(s *identity.Store) Model {
-	m.idents = s
-	return m
-}
