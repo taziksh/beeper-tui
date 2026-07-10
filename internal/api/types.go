@@ -19,6 +19,10 @@ type Chat struct {
 	LastActive       time.Time
 	Preview          string   // plain-text last-message preview, may be empty
 	AllowedReactions []string // network's allowed reaction keys; empty means unrestricted
+	// PeerUserID is the other person's Beeper user id for type=="single" chats,
+	// when participants are available. Empty for groups or when unknown.
+	// Used to link local identity cards across restarts.
+	PeerUserID string
 }
 
 // Message is our decoupled view of a single message.

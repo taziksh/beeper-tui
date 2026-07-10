@@ -43,6 +43,7 @@ func (c *Client) GetChat(ctx context.Context, chatID string) (Chat, error) {
 		LastActive:   ch.LastActivity,
 
 		AllowedReactions: ch.Capabilities.AllowedReactions,
+		PeerUserID:       peerUserID(string(ch.Type), ch.Participants.Items),
 	}, nil
 }
 
@@ -64,5 +65,23 @@ func mapChat(c beeperdesktopapi.ChatListResponse) Chat {
 		Preview:      c.Preview.Text,
 
 		AllowedReactions: c.Capabilities.AllowedReactions,
+		PeerUserID:       peerUserID(string(c.Type), c.Participants.Items),
 	}
+}
+
+// peerUserID returns the non-self participant id for a single (DM) chat.
+// Groups and missing participant lists yield "".
+func peerUserID(chatType string, items []beeperdesktopapi.ChatParticipantsItem) string {
+	if chatType != string(beeperdesktopapi.ChatTypeSingle) {
+		return ""
+	}
+	for _, p := range items {
+		if p.IsSelf {
+			continue
+		}
+		if p.ID != "" {
+			return p.ID
+		}
+	}
+	return ""
 }

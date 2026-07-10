@@ -28,7 +28,14 @@ const singlePageChatsJSON = `{
       "title": "Bob", "type": "single",
       "unreadCount": 0, "unreadMentionsCount": 0,
       "lastActivity": "2026-05-18T09:30:00Z",
-      "preview": {"id":"m1","accountID":"acc-sig","chatID":"chat-2","senderID":"u2","sortKey":"2","timestamp":"2026-05-18T09:30:00Z","text":"ok!"}
+      "preview": {"id":"m1","accountID":"acc-sig","chatID":"chat-2","senderID":"u2","sortKey":"2","timestamp":"2026-05-18T09:30:00Z","text":"ok!"},
+      "participants": {
+        "hasMore": false, "total": 2,
+        "items": [
+          {"id": "me-sig", "fullName": "Me", "isSelf": true},
+          {"id": "user-bob", "fullName": "Bob", "isSelf": false}
+        ]
+      }
     }
   ],
   "hasMore": false,
@@ -75,6 +82,12 @@ func TestListChats_MapsSinglePage(t *testing.T) {
 	}
 	if chats[0].Type != "group" {
 		t.Errorf("chats[0].Type = %q, want group", chats[0].Type)
+	}
+	if chats[0].PeerUserID != "" {
+		t.Errorf("group PeerUserID = %q, want empty", chats[0].PeerUserID)
+	}
+	if chats[1].PeerUserID != "user-bob" {
+		t.Errorf("single PeerUserID = %q, want user-bob", chats[1].PeerUserID)
 	}
 }
 

@@ -2,7 +2,7 @@
 
 **bd epic:** `beeper-tui-dn0` (P2)  
 **Date:** 2026-07-09  
-**Status:** agreed direction; Phase A not yet implemented
+**Status:** Phase A implemented (`I` notes card, local `identities.json`)
 
 ## Problem
 

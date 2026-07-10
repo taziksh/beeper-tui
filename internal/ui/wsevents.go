@@ -277,6 +277,10 @@ func (m Model) applyChatRefreshed(chat api.Chat) Model {
 		if chat.Preview == "" {
 			chat.Preview = m.chats[idx].Preview
 		}
+		// GetChat can omit participants; keep a known peer so identity links stay resolvable.
+		if chat.PeerUserID == "" {
+			chat.PeerUserID = m.chats[idx].PeerUserID
+		}
 		m.chats[idx] = chat
 	} else {
 		m.chats = append(m.chats, chat)

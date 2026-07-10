@@ -145,7 +145,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.mode == ModeReact {
 			return m.handleReactKey(msg.String(), msg.Text)
 		}
+		if m.mode == ModeIdentity {
+			return m.handleIdentityKey(msg.String(), msg.Text)
+		}
 		return m.handleKey(msg.String())
+	case tea.PasteMsg:
+		if m.mode == ModeIdentity {
+			return m.handleIdentityKey("", msg.Content)
+		}
 	}
 	return m, nil
 }
