@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"hash/fnv"
 	"strings"
 	"time"
 
@@ -10,6 +11,36 @@ import (
 
 	"github.com/taziksh/beeper-tui/internal/api"
 )
+
+var userColorStrings = []string{
+	"203", "167", "209", "202", "215", "208", "214", "220",
+	"227", "3",   "190", "154", "118", "82",  "119", "10",
+	"34",  "157", "78",  "47",  "42",  "49",  "50",  "37",
+	"14",  "87",  "159", "45",  "39",  "117", "33",  "75",
+	"27",  "111", "69",  "63",  "105", "147", "99",  "141",
+	"135", "183", "177", "171", "207", "213", "176", "206",
+	"212", "205", "218", "175", "204",
+}
+
+func styledUsername(msg api.Message) string {
+	name := msg.SenderName
+	var style lipgloss.Style
+	if msg.IsFromMe {
+		name = "You"
+		style = accentStyle
+	} else {
+		h := fnv.New32a()
+		h.Write([]byte(name))
+		c := userColorStrings[h.Sum32()%uint32(len(userColorStrings))]
+		style = lipgloss.NewStyle().Foreground(lipgloss.Color(c))
+	}
+	s := truncate(name, 12)
+	pad := 12 - lipgloss.Width(s)
+	if pad > 0 {
+		s += strings.Repeat(" ", pad)
+	}
+	return style.Render(s)
+}
 
 func (m Model) View() tea.View {
 	v := tea.NewView(m.render())
@@ -136,14 +167,10 @@ func (m Model) renderSearch() string {
 		if i == m.searchSelected {
 			prefix = "> "
 		}
-		who := msg.SenderName
-		if msg.IsFromMe {
-			who = "You"
-		}
-		line := fmt.Sprintf("%s[%s] %-12s %s",
+		line := fmt.Sprintf("%s[%s]  %s  %s",
 			prefix,
 			truncate(m.chatTitle(msg.ChatID), 18),
-			truncate(who, 12),
+			styledUsername(msg),
 			msg.Text,
 		)
 		b.WriteString(line + "\n")
@@ -192,10 +219,6 @@ func (m Model) renderConversation() string {
 	self := m.selfUserID()
 	for i := m.msgOffset; i < end; i++ {
 		msg := m.messages[i]
-		who := msg.SenderName
-		if msg.IsFromMe {
-			who = "You"
-		}
 		ts := formatMessageTime(msg.Timestamp, time.Now())
 		marker := readGlyph
 		if msg.IsUnread {
@@ -205,7 +228,7 @@ func (m Model) renderConversation() string {
 		if i == m.msgSelected {
 			prefix = "> "
 		}
-		line := fmt.Sprintf("%s%s %s  %-12s  %s", prefix, marker, ts, truncate(who, 12), msg.Text)
+		line := fmt.Sprintf("%s%s %s  %s  %s", prefix, marker, ts, styledUsername(msg), msg.Text)
 		if r := formatReactions(msg.Reactions, self); r != "" {
 			line += "  " + r
 		}
@@ -293,7 +316,7 @@ func formatMessageTime(ts, now time.Time) string {
 		return local.Format("15:04")
 	}
 	if local.Year() == today.Year() {
-		return local.Format("Jan 2 15:04")
+		return local.Format("Jan 02 15:04")
 	}
 	return local.Format("2006-01-02 15:04")
 }

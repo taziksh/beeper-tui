@@ -125,13 +125,9 @@ func (m Model) previewLines(w, maxRows int) []string {
 		start = 0
 	}
 	for _, msg := range msgs[start:] {
-		who := msg.SenderName
-		if msg.IsFromMe {
-			who = "You"
-		}
 		text := strings.ReplaceAll(msg.Text, "\n", " ")
 		ts := formatMessageTime(msg.Timestamp, time.Now())
-		lines = append(lines, clip.Render(fmt.Sprintf("%s %s: %s", ts, truncate(who, 12), text)))
+		lines = append(lines, clip.Render(fmt.Sprintf("%s %s: %s", ts, styledUsername(msg), text)))
 	}
 	return lines
 }
