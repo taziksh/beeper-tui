@@ -75,7 +75,7 @@ func (m Model) listRows() []string {
 			prefix = "> "
 		}
 		line := base.Render(prefix) + accent.Render(mark) +
-			base.Render(" ") + networkGlyph(c.Network) + base.Render(" ") +
+			base.Render(" ") + networkGlyph(c.Network, base) + base.Render(" ") +
 			accent.Render(fmt.Sprintf("%4d", c.Unread)) +
 			base.Render("  "+c.Title)
 		rows = append(rows, line)

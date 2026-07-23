@@ -37,15 +37,17 @@ var networkIcons = map[string]brandIcon{
 }
 
 // networkGlyph returns the brand glyph for network, styled in its brand color.
+// The base style is merged in so the icon inherits attributes like Bold from the
+// row's selection style, preventing ANSI boundary artifacts.
 // Unknown networks get a neutral chat bubble so the icon column stays aligned.
-func networkGlyph(network string) string {
+func networkGlyph(network string, base lipgloss.Style) string {
 	ic, ok := networkIcons[strings.ToLower(strings.TrimSpace(network))]
 	if !ok {
 		ic = brandIcon{glyph: genericChatGlyph}
 	}
 	glyph := string(ic.glyph)
 	if ic.color == "" {
-		return glyph
+		return base.Render(glyph)
 	}
-	return lipgloss.NewStyle().Foreground(lipgloss.Color(ic.color)).Render(glyph)
+	return base.Foreground(lipgloss.Color(ic.color)).Render(glyph)
 }
