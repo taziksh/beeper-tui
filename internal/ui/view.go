@@ -190,6 +190,23 @@ func (m Model) renderConversation() string {
 		end = len(m.messages)
 	}
 	self := m.selfUserID()
+	nameLen := 0
+	for i := m.msgOffset; i < end; i++ {
+		who := m.messages[i].SenderName
+		if m.messages[i].IsFromMe {
+			who = "You"
+		}
+		if n := len(who); n > nameLen {
+			nameLen = n
+		}
+	}
+	if nameLen > 12 {
+		nameLen = 12
+	}
+	if nameLen < 1 {
+		nameLen = 1
+	}
+	nameFmt := fmt.Sprintf("%%-%ds", nameLen)
 	for i := m.msgOffset; i < end; i++ {
 		msg := m.messages[i]
 		who := msg.SenderName
@@ -205,7 +222,7 @@ func (m Model) renderConversation() string {
 		if i == m.msgSelected {
 			prefix = "> "
 		}
-		line := fmt.Sprintf("%s%s %s  %-12s  %s", prefix, marker, ts, truncate(who, 12), msg.Text)
+		line := fmt.Sprintf("%s%s %s  %s  %s", prefix, marker, ts, fmt.Sprintf(nameFmt, truncate(who, nameLen)), msg.Text)
 		if r := formatReactions(msg.Reactions, self); r != "" {
 			line += "  " + r
 		}
