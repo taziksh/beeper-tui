@@ -293,7 +293,7 @@ func formatMessageTime(ts, now time.Time) string {
 		return local.Format("15:04")
 	}
 	if local.Year() == today.Year() {
-		return local.Format("Jan 2 15:04")
+		return local.Format("Jan 02 15:04")
 	}
 	return local.Format("2006-01-02 15:04")
 }
