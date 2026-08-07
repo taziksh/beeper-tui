@@ -1,4 +1,4 @@
-.PHONY: run install test vet check
+.PHONY: run install test vet lint check
 
 run:
 	go run ./cmd/beeper-tui
@@ -12,4 +12,7 @@ test:
 vet:
 	go vet ./...
 
-check: test vet
+lint:
+	golangci-lint run ./...
+
+check: test vet lint

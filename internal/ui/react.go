@@ -221,7 +221,7 @@ func (m Model) toggleReaction(key string) (Model, tea.Cmd) {
 	if remove {
 		kept := msg.Reactions[:0]
 		for _, r := range msg.Reactions {
-			if !(r.Key == key && r.ParticipantID == self) {
+			if r.Key != key || r.ParticipantID != self {
 				kept = append(kept, r)
 			}
 		}

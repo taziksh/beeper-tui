@@ -66,4 +66,3 @@ func mapChat(c beeperdesktopapi.ChatListResponse) Chat {
 		AllowedReactions: c.Capabilities.AllowedReactions,
 	}
 }
-
