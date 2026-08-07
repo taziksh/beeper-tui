@@ -69,7 +69,10 @@ func (m Model) refreshMessagesCmd(chatID string) tea.Cmd {
 // applyMessagesRefreshed swaps in the refetched conversation, keeping the
 // reader's scroll position except at the bottom, which sticks to the new
 // bottom. Optimistic sends the server has not echoed yet are re-appended so
-// a poll cannot make a just-sent message vanish.
+// a poll cannot make a just-sent message vanish. An optimistic send the
+// server HAS echoed is dropped along with its failure flag: the send call
+// can return an error after the bridge already dispatched the message
+// (iMessage attachments do this), and the server's copy is the truth.
 func (m Model) applyMessagesRefreshed(msg messagesRefreshedMsg) Model {
 	if msg.chatID != m.currentChatID {
 		return m
@@ -77,9 +80,14 @@ func (m Model) applyMessagesRefreshed(msg messagesRefreshedMsg) Model {
 	atBottom := m.msgOffset >= m.maxMsgOffset()
 	merged := msg.messages
 	for _, old := range m.messages {
-		if strings.HasPrefix(old.ID, "local:") && !containsText(merged, old.Text) {
-			merged = append(merged, old)
+		if !strings.HasPrefix(old.ID, "local:") {
+			continue
 		}
+		if hasEcho(merged, old) {
+			delete(m.failedSends, old.ID)
+			continue
+		}
+		merged = append(merged, old)
 	}
 	m.messages = merged
 	if atBottom {
@@ -89,9 +97,21 @@ func (m Model) applyMessagesRefreshed(msg messagesRefreshedMsg) Model {
 	return m.clampWindow()
 }
 
-func containsText(msgs []api.Message, text string) bool {
+// hasEcho reports whether the server already carries an optimistic local
+// send. Matching is by from-me + same text + same has-attachments shape, and
+// the server copy must not predate the local send by more than a clock-skew
+// allowance, so an older identical message doesn't swallow a genuinely
+// unsent one.
+func hasEcho(msgs []api.Message, local api.Message) bool {
+	cutoff := local.Timestamp.Add(-2 * time.Minute)
 	for _, msg := range msgs {
-		if msg.IsFromMe && msg.Text == text {
+		if !msg.IsFromMe || msg.Text != local.Text {
+			continue
+		}
+		if (len(msg.Attachments) > 0) != (len(local.Attachments) > 0) {
+			continue
+		}
+		if msg.Timestamp.IsZero() || msg.Timestamp.After(cutoff) {
 			return true
 		}
 	}

@@ -2,6 +2,9 @@ package ui
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"syscall"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -65,6 +68,8 @@ func (m Model) searchMessagesCmd(query string) tea.Cmd {
 
 type sendResultMsg struct {
 	localID string
+	text    string
+	atts    []string
 	err     error
 }
 
@@ -74,13 +79,52 @@ type archiveResultMsg struct {
 	err      error
 }
 
+// sendErrReason condenses a send error to a short cause for the failed-send
+// flag in the conversation view.
+func sendErrReason(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timed out"
+	case errors.Is(err, syscall.ECONNREFUSED):
+		return "beeper not running"
+	}
+	if s := api.ErrorStatus(err); s != 0 {
+		return fmt.Sprintf("HTTP %d", s)
+	}
+	root := err
+	for u := errors.Unwrap(root); u != nil; u = errors.Unwrap(u) {
+		root = u
+	}
+	return truncate(root.Error(), 40)
+}
+
+// retryFailedSend re-sends the failed message under the cursor from its
+// recorded draft.
+func (m Model) retryFailedSend() (Model, tea.Cmd) {
+	msg := m.cursorMessage()
+	if msg == nil {
+		return m, nil
+	}
+	f, ok := m.failedSends[msg.ID]
+	if !ok {
+		return m, nil
+	}
+	delete(m.failedSends, msg.ID)
+	if len(f.atts) > 0 {
+		return m, m.sendAttachmentsCmd(msg.ChatID, msg.ID, f.text, f.atts)
+	}
+	return m, m.sendMessageCmd(msg.ChatID, msg.ID, f.text)
+}
+
 func (m Model) sendMessageCmd(chatID, localID, text string) tea.Cmd {
 	client := m.client
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		err := client.SendMessage(ctx, chatID, text)
-		return sendResultMsg{localID: localID, err: err}
+		return sendResultMsg{localID: localID, text: text, err: err}
 	}
 }
 

@@ -19,3 +19,19 @@ func (c *Client) SendMessage(ctx context.Context, chatID, text string) error {
 	}
 	return nil
 }
+
+// SendAttachment sends a previously uploaded file (see UploadAsset) to a chat,
+// with text as an optional caption.
+func (c *Client) SendAttachment(ctx context.Context, chatID, text, uploadID string) error {
+	params := beeperdesktopapi.MessageSendParams{
+		Attachment: beeperdesktopapi.MessageSendParamsAttachment{UploadID: uploadID},
+	}
+	if text != "" {
+		params.Text = beeperdesktopapi.String(text)
+	}
+	_, err := c.sdk.Messages.Send(ctx, escapeChatID(chatID), params)
+	if err != nil {
+		return fmt.Errorf("api: send attachment to %s: %w", chatID, err)
+	}
+	return nil
+}

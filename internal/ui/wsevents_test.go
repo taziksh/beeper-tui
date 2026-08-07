@@ -164,7 +164,7 @@ func TestApplyWSEvent_MessageUpserted_OptimisticEcho_ReplacesPlaceholder(t *test
 		messages: []api.Message{
 			{ID: "local:1", ChatID: "a", Text: "hi there", IsFromMe: true},
 		},
-		failedSends: map[string]bool{"local:1": true},
+		failedSends: map[string]failedSend{"local:1": {}},
 		height:      7,
 	}
 	m, _ = m.applyWSEvent(upsertEvent("a", entryJSON("srv9", "a", "You", "hi there", wsT0.Add(time.Minute), true, false)))
@@ -175,7 +175,7 @@ func TestApplyWSEvent_MessageUpserted_OptimisticEcho_ReplacesPlaceholder(t *test
 	if m.messages[0].ID != "srv9" {
 		t.Errorf("ID = %q, want server ID srv9", m.messages[0].ID)
 	}
-	if m.failedSends["local:1"] {
+	if _, ok := m.failedSends["local:1"]; ok {
 		t.Error("server echo must clear the failed-send flag")
 	}
 }

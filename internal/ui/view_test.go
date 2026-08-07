@@ -126,7 +126,7 @@ func TestRender_FailedSendMarker(t *testing.T) {
 		currentChatID: "a",
 		chats:         []api.Chat{{ID: "a", Title: "Alice"}},
 		messages:      []api.Message{{ID: "local:1", SenderName: "You", Text: "nope", IsFromMe: true}},
-		failedSends:   map[string]bool{"local:1": true},
+		failedSends:   map[string]failedSend{"local:1": {}},
 	}
 	out := m.render()
 	if !strings.Contains(out, "! send failed") {

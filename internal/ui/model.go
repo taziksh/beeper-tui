@@ -71,10 +71,16 @@ type Model struct {
 	reactErr     error
 	selfUsers    map[string]string // own user ID per account ID, for recognizing own reactions
 
+	// media state
+	mediaPreviews map[string]mediaPreview // rendered inline previews keyed by attachment
+	mediaErr      error                   // open/preview error, shown in the conversation status bar
+
 	// compose state (INSERT mode)
 	input       string
-	failedSends map[string]bool // local ids of optimistic sends that errored
-	localSeq    int             // mints local ids for optimistic messages
+	composeAtts []string              // local file paths attached to the draft, sent on enter
+	composeErr  error                 // clipboard/attach error, shown in the INSERT status bar
+	failedSends map[string]failedSend // errored optimistic sends keyed by local id
+	localSeq    int                   // mints local ids for optimistic messages
 
 	// chat search state
 	searchQuery    string
@@ -83,7 +89,6 @@ type Model struct {
 	searchOffset   int
 	searchLoading  bool
 	searchErr      error
-
 
 	width  int
 	height int
@@ -102,6 +107,13 @@ type Model struct {
 // New builds the initial model. The chat fetch happens in Init, not here.
 // events may be nil, which disables live updates.
 func New(client *api.Client, events *ws.Client) Model {
-	return Model{client: client, events: events, mode: ModeList, loadingChats: true, failedSends: map[string]bool{}}
+	return Model{client: client, events: events, mode: ModeList, loadingChats: true, failedSends: map[string]failedSend{}}
 }
 
+// failedSend records why an optimistic send errored, plus the draft needed
+// to retry it with R.
+type failedSend struct {
+	reason string
+	text   string
+	atts   []string
+}

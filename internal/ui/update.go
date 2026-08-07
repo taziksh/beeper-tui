@@ -38,14 +38,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.applyPreviewLoaded(msg), nil
 	case wsEventMsg:
 		m, cmd := m.applyWSEvent(msg.event)
-		return m, tea.Batch(cmd, m.waitForWSEvent())
+		return m, tea.Batch(cmd, m.loadPreviewsCmd(), m.waitForWSEvent())
 	case chatRefreshedMsg:
 		m = m.applyChatRefreshed(msg.chat)
 		return m.maybeSaveCache()
 	case pollTickMsg:
 		return m.applyPollTick()
 	case messagesRefreshedMsg:
-		return m.applyMessagesRefreshed(msg), nil
+		m = m.applyMessagesRefreshed(msg)
+		return m, m.loadPreviewsCmd()
 	case messagesLoadedMsg:
 		if msg.chatID == m.currentChatID {
 			m.messages = msg.messages
@@ -61,7 +62,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.msgOffset = m.maxMsgOffset()
 			}
 		}
-		return m, nil
+		return m, m.loadPreviewsCmd()
 	case searchLoadedMsg:
 		if m.mode == ModeSearch && msg.query == m.searchQuery {
 			m.searchResults = msg.results
@@ -74,6 +75,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case selfUsersLoadedMsg:
 		m.selfUsers = msg.users
 		return m, nil
+	case mediaPreviewMsg:
+		if m.mediaPreviews == nil {
+			m.mediaPreviews = map[string]mediaPreview{}
+		}
+		m.mediaPreviews[msg.key] = mediaPreview{lines: msg.lines, err: msg.err}
+		// A finished preview changes message heights; re-pin the window.
+		return m.clampWindow(), nil
+	case openResultMsg:
+		m.mediaErr = msg.err
+		return m, nil
+	case clipboardImageMsg:
+		if msg.err != nil {
+			m.composeErr = msg.err
+			return m, nil
+		}
+		m.composeErr = nil
+		m.composeAtts = append(m.composeAtts, msg.path)
+		return m, nil
+	case tea.PasteMsg:
+		return m.handlePaste(msg.Content)
 	case reactResultMsg:
 		if msg.err != nil {
 			m.reactErr = msg.err
@@ -86,9 +107,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case sendResultMsg:
 		if msg.err != nil {
 			if m.failedSends == nil {
-				m.failedSends = map[string]bool{}
+				m.failedSends = map[string]failedSend{}
 			}
-			m.failedSends[msg.localID] = true
+			m.failedSends[msg.localID] = failedSend{reason: sendErrReason(msg.err), text: msg.text, atts: msg.atts}
+			// The send call can error after the bridge dispatched (iMessage
+			// attachments). Refetch to reconcile: if the server has the
+			// message, the failure flag clears with the optimistic row.
+			if m.currentChatID != "" {
+				return m, m.refreshMessagesCmd(m.currentChatID)
+			}
 		}
 		return m, nil
 	case archiveResultMsg:

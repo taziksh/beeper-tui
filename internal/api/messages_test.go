@@ -232,3 +232,37 @@ func TestListMessages_DropsReactionEvents(t *testing.T) {
 		t.Errorf("msgs = %+v, want only the real message m1", msgs)
 	}
 }
+
+func TestListMessages_MapsAttachments(t *testing.T) {
+	const body = `{
+  "items": [
+    {"id":"m1","accountID":"acc","chatID":"chat-1","senderID":"u1","sortKey":"1","text":"","timestamp":"2026-05-19T10:00:00Z","isSender":false,"senderName":"Bob",
+     "attachments":[
+       {"type":"img","id":"mxc://example/abc","srcURL":"file:///cache/a.jpg","fileName":"a.jpg","fileSize":120000,"mimeType":"image/jpeg","size":{"width":640,"height":480}},
+       {"type":"audio","isVoiceNote":true,"duration":14.2,"transcription":{"engine":"x","transcription":"running late"}}
+     ]}
+  ],
+  "hasMore": false, "oldestCursor": "o", "newestCursor": "n"
+}`
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	})
+
+	msgs, err := client.ListMessages(context.Background(), "chat-1")
+	if err != nil {
+		t.Fatalf("ListMessages() error = %v", err)
+	}
+	if len(msgs) != 1 || len(msgs[0].Attachments) != 2 {
+		t.Fatalf("got %d messages with %v attachments, want 1 message with 2 attachments", len(msgs), msgs)
+	}
+	img := msgs[0].Attachments[0]
+	if img.Type != "img" || img.ID != "mxc://example/abc" || img.FileName != "a.jpg" ||
+		img.FileSize != 120000 || img.Width != 640 || img.Height != 480 {
+		t.Errorf("Attachments[0] = %+v, want mapped image fields", img)
+	}
+	voice := msgs[0].Attachments[1]
+	if !voice.IsVoiceNote || voice.Duration != 14.2 || voice.Transcription != "running late" {
+		t.Errorf("Attachments[1] = %+v, want voice note with transcription", voice)
+	}
+}

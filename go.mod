@@ -8,6 +8,7 @@ require (
 	github.com/beeper/desktop-api-go/v5 v5.0.1
 	github.com/coder/websocket v1.8.14
 	github.com/forPelevin/gomoji v1.4.1
+	golang.org/x/image v0.42.0
 )
 
 require (

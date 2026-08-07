@@ -23,15 +23,33 @@ type Chat struct {
 
 // Message is our decoupled view of a single message.
 type Message struct {
-	ID         string
-	ChatID     string
-	SenderName string
-	Text       string
-	Timestamp  time.Time
-	IsFromMe   bool
-	IsUnread   bool // true if unread for the authenticated user; may be absent on some networks
-	IsReaction bool // a reaction event, not a real message; Desktop hides these in the timeline
-	Reactions  []Reaction
+	ID          string
+	ChatID      string
+	SenderName  string
+	Text        string
+	Timestamp   time.Time
+	IsFromMe    bool
+	IsUnread    bool // true if unread for the authenticated user; may be absent on some networks
+	IsReaction  bool // a reaction event, not a real message; Desktop hides these in the timeline
+	Reactions   []Reaction
+	Attachments []Attachment
+}
+
+// Attachment is a media file carried by a message.
+type Attachment struct {
+	Type          string // "img" | "video" | "audio" | "unknown"
+	ID            string // mxc:// identifier; resolve to a local path with DownloadAsset
+	SrcURL        string // public URL or local file path, may be temporary
+	FileName      string
+	FileSize      int64   // bytes, 0 if unknown
+	Duration      float64 // seconds, audio/video only
+	MimeType      string
+	Width         int
+	Height        int
+	IsVoiceNote   bool
+	IsGif         bool
+	IsSticker     bool
+	Transcription string // voice-note transcription if the bridge provides one
 }
 
 // Reaction is one participant's reaction to a message.

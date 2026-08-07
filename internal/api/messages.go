@@ -69,16 +69,35 @@ func mapMessage(m shared.Message) Message {
 	for _, r := range m.Reactions {
 		reactions = append(reactions, Reaction{Key: r.ReactionKey, Emoji: r.Emoji, ParticipantID: r.ParticipantID})
 	}
+	var attachments []Attachment
+	for _, a := range m.Attachments {
+		attachments = append(attachments, Attachment{
+			Type:          string(a.Type),
+			ID:            a.ID,
+			SrcURL:        a.SrcURL,
+			FileName:      a.FileName,
+			FileSize:      int64(a.FileSize),
+			Duration:      a.Duration,
+			MimeType:      a.MimeType,
+			Width:         int(a.Size.Width),
+			Height:        int(a.Size.Height),
+			IsVoiceNote:   a.IsVoiceNote,
+			IsGif:         a.IsGif,
+			IsSticker:     a.IsSticker,
+			Transcription: a.Transcription.Transcription,
+		})
+	}
 	return Message{
-		ID:         m.ID,
-		ChatID:     m.ChatID,
-		SenderName: m.SenderName,
-		Text:       renderText(m),
-		Timestamp:  m.Timestamp,
-		IsFromMe:   m.IsSender,
-		IsUnread:   m.IsUnread,
-		IsReaction: m.Type == shared.MessageTypeReaction,
-		Reactions:  reactions,
+		ID:          m.ID,
+		ChatID:      m.ChatID,
+		SenderName:  m.SenderName,
+		Text:        renderText(m),
+		Timestamp:   m.Timestamp,
+		IsFromMe:    m.IsSender,
+		IsUnread:    m.IsUnread,
+		IsReaction:  m.Type == shared.MessageTypeReaction,
+		Reactions:   reactions,
+		Attachments: attachments,
 	}
 }
 

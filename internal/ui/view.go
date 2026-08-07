@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -185,43 +186,148 @@ func (m Model) renderConversation() string {
 		return b.String()
 	}
 	vr := m.visibleRows()
-	end := m.msgOffset + vr
-	if end > len(m.messages) {
-		end = len(m.messages)
-	}
-	self := m.selfUserID()
-	for i := m.msgOffset; i < end; i++ {
-		msg := m.messages[i]
-		who := msg.SenderName
-		if msg.IsFromMe {
-			who = "You"
+	used := 0
+	for i := m.msgOffset; i < len(m.messages) && used < vr; i++ {
+		for _, line := range m.messageBlock(i) {
+			if used >= vr {
+				break
+			}
+			b.WriteString(line + "\n")
+			used++
 		}
-		ts := formatMessageTime(msg.Timestamp, time.Now())
-		marker := readGlyph
-		if msg.IsUnread {
-			marker = accentStyle.Render(msgMarker)
-		}
-		prefix := "  "
-		if i == m.msgSelected {
-			prefix = "> "
-		}
-		line := fmt.Sprintf("%s%s %s  %-12s  %s", prefix, marker, ts, truncate(who, 12), msg.Text)
-		if r := formatReactions(msg.Reactions, self); r != "" {
-			line += "  " + r
-		}
-		if m.failedSends[msg.ID] {
-			line += "  ! send failed"
-		}
-		b.WriteString(line + "\n")
 	}
 	if m.mode == ModeInsert {
-		b.WriteString("> " + m.input + "█\n")
+		b.WriteString("> " + m.composeChips() + m.input + "█\n")
 	}
 	if m.mode == ModeReact {
 		b.WriteString(m.reactPromptLine() + "\n")
 	}
 	b.WriteString(m.convStatusBar())
 	return b.String()
+}
+
+// messageBlock renders one message as its full set of lines: the main row,
+// then attachment rows (inline previews, media labels, voice transcriptions).
+// msgLines and the scroll math count these same lines, so heights stay in
+// sync with what renders.
+func (m Model) messageBlock(i int) []string {
+	msg := m.messages[i]
+	who := msg.SenderName
+	if msg.IsFromMe {
+		who = "You"
+	}
+	ts := formatMessageTime(msg.Timestamp, time.Now())
+	marker := readGlyph
+	if msg.IsUnread {
+		marker = accentStyle.Render(msgMarker)
+	}
+	prefix := "  "
+	if i == m.msgSelected {
+		prefix = "> "
+	}
+	line := fmt.Sprintf("%s%s %s  %-12s  %s", prefix, marker, ts, truncate(who, 12), msg.Text)
+	if r := formatReactions(msg.Reactions, m.selfUserID()); r != "" {
+		line += "  " + r
+	}
+	if f, ok := m.failedSends[msg.ID]; ok {
+		line += "  ! send failed: " + f.reason + " · R retry"
+	}
+	lines := []string{line}
+	// The cursor's "> " only marks the header row; a selected message's
+	// attachment rows get an accent gutter so the selection visibly covers
+	// the whole block, previews included.
+	gutter := attIndent
+	if i == m.msgSelected {
+		gutter = "    " + accentStyle.Render("▌") + " "
+	}
+	for _, att := range msg.Attachments {
+		for _, l := range m.attachmentLines(msg, att) {
+			lines = append(lines, gutter+strings.TrimPrefix(l, attIndent))
+		}
+	}
+	return lines
+}
+
+// msgLines is the on-screen height of one message.
+func (m Model) msgLines(i int) int {
+	return len(m.messageBlock(i))
+}
+
+const attIndent = "      "
+
+// attachmentLines renders one attachment under its message: a half-block
+// preview plus label for images, a label with duration for audio and video,
+// and the transcription line for voice notes.
+func (m Model) attachmentLines(msg api.Message, att api.Attachment) []string {
+	name := att.FileName
+	size := formatBytes(att.FileSize)
+	label := strings.Join(nonEmpty(name, size), " · ")
+	switch {
+	case att.IsVoiceNote:
+		lines := []string{attIndent + "🎤 voice note " + formatDuration(att.Duration)}
+		if att.Transcription != "" {
+			lines = append(lines, attIndent+"“"+att.Transcription+"”")
+		}
+		return lines
+	case att.Type == "audio":
+		return []string{attIndent + strings.Join(nonEmpty("🎵 audio "+formatDuration(att.Duration), label), " · ")}
+	case att.Type == "video":
+		return []string{attIndent + strings.Join(nonEmpty("🎬 video "+formatDuration(att.Duration), label, "o: open"), " · ")}
+	case previewable(att):
+		caption := strings.Join(nonEmpty("🖼", label, "o: open"), " ")
+		pv, ok := m.mediaPreviews[previewKey(msg, att)]
+		switch {
+		case ok && len(pv.lines) > 0:
+			lines := make([]string, 0, len(pv.lines)+1)
+			for _, l := range pv.lines {
+				lines = append(lines, attIndent+l)
+			}
+			return append(lines, attIndent+caption)
+		case ok && pv.err != nil:
+			return []string{attIndent + caption + " · preview unavailable"}
+		default:
+			return []string{attIndent + caption + " · loading…"}
+		}
+	default:
+		return []string{attIndent + strings.Join(nonEmpty("📎", label, "o: open"), " ")}
+	}
+}
+
+// nonEmpty drops empty strings so separators don't double up.
+func nonEmpty(parts ...string) []string {
+	out := parts[:0]
+	for _, p := range parts {
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// composeChips labels the draft's pending attachments, Claude Code style:
+// "[image #1] [video #2] ".
+func (m Model) composeChips() string {
+	if len(m.composeAtts) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for i, path := range m.composeAtts {
+		fmt.Fprintf(&b, "[%s #%d] ", chipKind(path), i+1)
+	}
+	return b.String()
+}
+
+func chipKind(path string) string {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".mp4", ".mov", ".webm":
+		return "video"
+	case ".m4a", ".mp3", ".ogg", ".wav":
+		return "audio"
+	case ".pdf":
+		return "file"
+	default:
+		return "image"
+	}
 }
 
 // reactPromptLine shows the numbered quick-pick slots, the free-typed query,
@@ -306,7 +412,10 @@ func sameDay(a, b time.Time) bool {
 
 func (m Model) convStatusBar() string {
 	if m.mode == ModeInsert {
-		return "INSERT  enter send · esc cancel"
+		if m.composeErr != nil {
+			return fmt.Sprintf("INSERT  %v · enter send · esc cancel", m.composeErr)
+		}
+		return "INSERT  enter send · ctrl+v attach image · esc cancel"
 	}
 	if m.mode == ModeReact {
 		return "REACT  1-9 toggle · type name · tab cycle · enter send · esc cancel"
@@ -317,10 +426,13 @@ func (m Model) convStatusBar() string {
 	if m.reactErr != nil {
 		return fmt.Sprintf("NORMAL  react failed: %v", m.reactErr)
 	}
+	if m.mediaErr != nil {
+		return fmt.Sprintf("NORMAL  open failed: %v", m.mediaErr)
+	}
 	if m.archivingChatID != "" {
 		return "NORMAL  archiving…"
 	}
-	return "NORMAL  " + m.connStatus() + "j/k move · r react · i reply · a archive · q chats"
+	return "NORMAL  " + m.connStatus() + "j/k · r react · i reply · o open · a archive · q chats"
 }
 
 // wrap word-wraps s to width w so long errors stay fully readable instead of

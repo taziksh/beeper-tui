@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -21,12 +22,32 @@ func (m Model) visibleRows() int {
 	return r
 }
 
+// maxMsgOffset is the offset that pins the conversation to its bottom: the
+// first message index from which everything below still fits on screen.
+// Message heights vary now that attachments render inline, so this counts
+// rendered lines rather than messages.
 func (m Model) maxMsgOffset() int {
-	max := len(m.messages) - m.visibleRows()
-	if max < 0 {
-		return 0
+	vr := m.visibleRows()
+	lines := 0
+	for i := len(m.messages) - 1; i >= 0; i-- {
+		lines += m.msgLines(i)
+		if lines > vr {
+			if i == len(m.messages)-1 {
+				return i
+			}
+			return i + 1
+		}
 	}
-	return max
+	return 0
+}
+
+// linesBetween counts rendered lines for messages[a..b] inclusive.
+func (m Model) linesBetween(a, b int) int {
+	lines := 0
+	for i := a; i <= b && i < len(m.messages); i++ {
+		lines += m.msgLines(i)
+	}
+	return lines
 }
 
 func (m Model) cursorDown() Model {
@@ -204,12 +225,13 @@ func (m Model) clampWindow() Model {
 		if m.msgOffset < 0 {
 			m.msgOffset = 0
 		}
-		vr := m.visibleRows()
 		if m.msgSelected < m.msgOffset {
 			m.msgOffset = m.msgSelected
 		}
-		if m.msgSelected >= m.msgOffset+vr {
-			m.msgOffset = m.msgSelected - vr + 1
+		// Scroll down until the cursor message's lines fit on screen.
+		vr := m.visibleRows()
+		for m.msgOffset < m.msgSelected && m.linesBetween(m.msgOffset, m.msgSelected) > vr {
+			m.msgOffset++
 		}
 	}
 	return m
@@ -296,6 +318,7 @@ func (m Model) backToList() Model {
 	m.convErr = nil
 	m.archiveErr = nil
 	m.reactErr = nil
+	m.mediaErr = nil
 	m.searchQuery = ""
 	m.searchResults = nil
 	m.searchErr = nil
@@ -463,13 +486,20 @@ func (m Model) handleInsertKey(key, text string) (Model, tea.Cmd) {
 		return m, tea.Quit
 	case "esc":
 		m.input = ""
+		m.composeAtts = nil
+		m.composeErr = nil
 		m.mode = ModeConversation
 		return m, nil
 	case "enter":
 		return m.sendInput()
+	case "ctrl+v":
+		return m, pasteClipboardImageCmd()
 	case "backspace":
 		if r := []rune(m.input); len(r) > 0 {
 			m.input = string(r[:len(r)-1])
+		} else if n := len(m.composeAtts); n > 0 {
+			// With no text left, backspace eats the last attachment chip.
+			m.composeAtts = m.composeAtts[:n-1]
 		}
 		return m, nil
 	default:
@@ -478,27 +508,63 @@ func (m Model) handleInsertKey(key, text string) (Model, tea.Cmd) {
 	}
 }
 
+// handlePaste routes bracketed-paste text by mode. In INSERT a paste that is
+// a dragged-in media file path becomes an attachment chip instead of text.
+func (m Model) handlePaste(content string) (Model, tea.Cmd) {
+	switch m.mode {
+	case ModeInsert:
+		if p := pastedFilePath(content); p != "" {
+			m.composeAtts = append(m.composeAtts, p)
+			m.composeErr = nil
+			return m, nil
+		}
+		m.input += content
+		return m, nil
+	case ModeSearch:
+		m.searchQuery += content
+		return m.searchAfterQueryChange()
+	case ModeReact:
+		m.reactInput += content
+		return m, nil
+	}
+	return m, nil
+}
+
 // sendInput appends the draft as an optimistic message, clears the compose
-// line, returns to NORMAL, and fires the send command. Empty input is a no-op
-// (stays in INSERT).
+// line, returns to NORMAL, and fires the send command. An empty draft is a
+// no-op (stays in INSERT). With attachments pending, the files upload and
+// send with the text as the caption.
 func (m Model) sendInput() (Model, tea.Cmd) {
 	text := m.input
-	if text == "" {
+	atts := m.composeAtts
+	if text == "" && len(atts) == 0 {
 		return m, nil
 	}
 	m.localSeq++
 	localID := fmt.Sprintf("local:%d", m.localSeq)
-	m.messages = append(m.messages, api.Message{
+	optimistic := api.Message{
 		ID:         localID,
 		ChatID:     m.currentChatID,
 		SenderName: "You",
 		Text:       text,
 		Timestamp:  time.Now(),
 		IsFromMe:   true,
-	})
+	}
+	for _, path := range atts {
+		optimistic.Attachments = append(optimistic.Attachments, api.Attachment{
+			Type:     "unknown",
+			FileName: filepath.Base(path),
+		})
+	}
+	m.messages = append(m.messages, optimistic)
 	m.input = ""
+	m.composeAtts = nil
+	m.composeErr = nil
 	m.mode = ModeConversation
 	m = m.jumpBottom()
+	if len(atts) > 0 {
+		return m, m.sendAttachmentsCmd(m.currentChatID, localID, text, atts)
+	}
 	return m, m.sendMessageCmd(m.currentChatID, localID, text)
 }
 
@@ -562,6 +628,16 @@ func (m Model) handleKey(key string) (Model, tea.Cmd) {
 	case "i":
 		if m.mode == ModeConversation {
 			m.mode = ModeInsert
+		}
+		return m, nil
+	case "o":
+		if m.mode == ModeConversation {
+			return m.openCursorAttachment()
+		}
+		return m, nil
+	case "R":
+		if m.mode == ModeConversation {
+			return m.retryFailedSend()
 		}
 		return m, nil
 	case "a":

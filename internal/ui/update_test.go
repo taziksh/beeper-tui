@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"syscall"
 	"testing"
 	"time"
 
@@ -88,19 +90,75 @@ func TestUpdate_StaleConversationError_Ignored(t *testing.T) {
 }
 
 func TestUpdate_SendResultError_MarksFailed(t *testing.T) {
-	m := Model{failedSends: map[string]bool{}}
-	got, _ := m.Update(sendResultMsg{localID: "local:1", err: errors.New("network down")})
+	m := Model{failedSends: map[string]failedSend{}}
+	got, _ := m.Update(sendResultMsg{localID: "local:1", text: "hi", atts: []string{"/tmp/a.png"}, err: errors.New("network down")})
 	gm := got.(Model)
-	if !gm.failedSends["local:1"] {
-		t.Error("failedSends[local:1] should be true after an errored send")
+	f, ok := gm.failedSends["local:1"]
+	if !ok {
+		t.Fatal("failedSends[local:1] should be set after an errored send")
+	}
+	if f.reason == "" {
+		t.Error("failed send must record a reason")
+	}
+	if f.text != "hi" || len(f.atts) != 1 {
+		t.Errorf("failed send draft = %+v, want the original text and attachments", f)
+	}
+}
+
+func TestSendErrReason(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"timeout", fmt.Errorf("send: %w", context.DeadlineExceeded), "timed out"},
+		{"refused", fmt.Errorf("send: %w", syscall.ECONNREFUSED), "beeper not running"},
+		{"other", errors.New("upload rejected"), "upload rejected"},
+	}
+	for _, tt := range tests {
+		if got := sendErrReason(tt.err); got != tt.want {
+			t.Errorf("%s: sendErrReason() = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestRetryFailedSend_ResendsDraftAndClearsFlag(t *testing.T) {
+	m := Model{
+		mode:          ModeConversation,
+		currentChatID: "a",
+		height:        24,
+		messages:      []api.Message{{ID: "local:1", ChatID: "a", Text: "hi", IsFromMe: true}},
+		failedSends:   map[string]failedSend{"local:1": {reason: "timed out", text: "hi"}},
+	}
+	m = m.jumpBottom()
+	m, cmd := m.retryFailedSend()
+	if _, ok := m.failedSends["local:1"]; ok {
+		t.Error("retry must clear the failed flag")
+	}
+	if cmd == nil {
+		t.Fatal("retry must fire a send command")
+	}
+}
+
+func TestRetryFailedSend_IgnoresHealthyMessage(t *testing.T) {
+	m := Model{
+		mode:          ModeConversation,
+		currentChatID: "a",
+		height:        24,
+		messages:      []api.Message{{ID: "srv-1", ChatID: "a", Text: "hi", IsFromMe: true}},
+		failedSends:   map[string]failedSend{},
+	}
+	m = m.jumpBottom()
+	if _, cmd := m.retryFailedSend(); cmd != nil {
+		t.Error("retry on a message that did not fail must be a no-op")
 	}
 }
 
 func TestUpdate_SendResultSuccess_NotMarked(t *testing.T) {
-	m := Model{failedSends: map[string]bool{}}
+	m := Model{failedSends: map[string]failedSend{}}
 	got, _ := m.Update(sendResultMsg{localID: "local:1", err: nil})
 	gm := got.(Model)
-	if gm.failedSends["local:1"] {
+	if _, ok := gm.failedSends["local:1"]; ok {
 		t.Error("a successful send must not be marked failed")
 	}
 }

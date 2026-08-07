@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/taziksh/beeper-tui/internal/api"
 )
 
 // debugLog appends timing lines for slow update and render passes to
@@ -29,4 +31,18 @@ func logSlow(what string, start time.Time) {
 	if d := time.Since(start); d > slowThreshold {
 		debugLog.Printf("%s took %v", what, d)
 	}
+}
+
+// logAPIResult records an API call's outcome by shape only: operation name,
+// elapsed time, Go error type, and HTTP status. Never the error string, which
+// embeds request URLs and therefore chat IDs.
+func logAPIResult(op string, start time.Time, err error) {
+	if debugLog == nil {
+		return
+	}
+	if err == nil {
+		debugLog.Printf("%s ok in %v", op, time.Since(start))
+		return
+	}
+	debugLog.Printf("%s failed in %v: %T status=%d", op, time.Since(start), err, api.ErrorStatus(err))
 }
