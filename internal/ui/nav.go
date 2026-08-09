@@ -321,7 +321,6 @@ func (m Model) openSelected() (Model, tea.Cmd) {
 }
 
 func (m Model) backToList() Model {
-	m.mode = ModeList
 	m.convErr = nil
 	m.archiveErr = nil
 	m.reactErr = nil
@@ -330,6 +329,14 @@ func (m Model) backToList() Model {
 	m.searchResults = nil
 	m.searchErr = nil
 	m.searchLoading = false
+	// Conversations opened from a Chat-tab link return to the assistant view.
+	if m.returnToChat {
+		m.returnToChat = false
+		m.tab = TabChat
+		m.mode = ModeChat
+		return m
+	}
+	m.mode = ModeList
 	// Reading a chat can drop it from the current tab (e.g. the Unread tab once
 	// mark-read lands), leaving the selection pointing at an invisible chat: no
 	// cursor and dead j/k. Land on the position the chat occupied instead, which
@@ -383,12 +390,18 @@ func (m Model) applyArchive(chatID string, archived bool) Model {
 		m.chats[idx].Archived = archived
 	}
 	if archived && m.mode == ModeConversation && m.currentChatID == chatID {
-		m.mode = ModeList
 		m.currentChatID = ""
 		m.messages = nil
 		m.msgOffset = 0
 		m.loadingMsgs = false
 		m.convErr = nil
+		if m.returnToChat {
+			m.returnToChat = false
+			m.tab = TabChat
+			m.mode = ModeChat
+			return m
+		}
+		m.mode = ModeList
 	}
 	return m.selectFirstVisibleChat()
 }

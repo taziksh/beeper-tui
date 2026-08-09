@@ -107,7 +107,12 @@ type Model struct {
 	chatFollow    bool // pinned to the transcript bottom while streaming
 	chatTokens    int  // streamed tokens in the current response
 	chatStarted   time.Time
+	chatLinks     []chatLink
+	chatLinkSel   int // selected tappable name, -1 when none
 	chatReasoning int // hidden reasoning tokens in the current response
+	// returnToChat is set when a conversation was opened from a Chat-tab
+	// tappable link; q/esc then restores ModeChat instead of the inbox list.
+	returnToChat bool
 
 	width  int
 	height int

@@ -281,6 +281,8 @@ func (m Model) applyChatEvent(ev chatEvent) (Model, tea.Cmd) {
 	case chatEvDone:
 		turn.streaming = false
 		m.chatSession = nil
+		m.chatLinks = findChatLinks(turn.text, m.chats)
+		m.chatLinkSel = -1
 		return m.chatClampFollow(), nil
 	}
 	return m.chatClampFollow(), m.waitForChatEvent()
@@ -346,8 +348,36 @@ func (m Model) handleChatKey(key string) (Model, tea.Cmd) {
 	case "ctrl+c", "q":
 		return m, tea.Quit
 	case "esc":
+		if m.chatLinkSel >= 0 {
+			m.chatLinkSel = -1
+			return m, nil
+		}
 		return m.cancelChatSession(), nil
-	case "i", "enter":
+	case "tab":
+		if n := len(m.chatLinks); n > 0 {
+			// First tab from no selection lands on 0 (-1+1)%n.
+			m.chatLinkSel = (m.chatLinkSel + 1) % n
+			return m, nil
+		}
+		return m.cycleTab(1)
+	case "shift+tab":
+		if n := len(m.chatLinks); n > 0 {
+			// First shift+tab from no selection lands on the last link.
+			if m.chatLinkSel < 0 {
+				m.chatLinkSel = n - 1
+			} else {
+				m.chatLinkSel = (m.chatLinkSel + n - 1) % n
+			}
+			return m, nil
+		}
+		return m.cycleTab(-1)
+	case "enter":
+		if m.chatLinkSel >= 0 && m.chatLinkSel < len(m.chatLinks) {
+			return m.openChatByID(m.chatLinks[m.chatLinkSel].chatID)
+		}
+		m.mode = ModeChatInsert
+		return m, nil
+	case "i":
 		m.mode = ModeChatInsert
 		return m, nil
 	case "c":
@@ -388,7 +418,7 @@ func (m Model) handleChatKey(key string) (Model, tea.Cmd) {
 		return m, nil
 	case "l", "right":
 		return m.cycleTab(1)
-	case "h", "left", "shift+tab":
+	case "h", "left":
 		return m.cycleTab(-1)
 	}
 	return m, nil

@@ -11,7 +11,7 @@ import (
 func (m Model) renderChat() string {
 	var b strings.Builder
 	b.WriteString(m.tabBar() + "\n")
-	lines := m.chatLines()
+	lines := m.highlightChatLinks(m.chatLines())
 	vr := m.visibleRows()
 	if m.mode == ModeChatInsert {
 		vr--
