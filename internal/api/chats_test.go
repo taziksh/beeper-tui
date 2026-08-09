@@ -85,6 +85,10 @@ func TestListChats_FollowsPagination(t *testing.T) {
 	var calls int
 	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/v1/accounts" {
+			_, _ = w.Write([]byte(`[]`))
+			return
+		}
 		if calls == 0 {
 			_, _ = w.Write([]byte(page1))
 		} else {
@@ -131,5 +135,44 @@ func TestListChats_PropagatesAuthError(t *testing.T) {
 	_, err := client.ListChats(context.Background())
 	if err == nil {
 		t.Fatal("ListChats() error = nil, want non-nil on 401")
+	}
+}
+
+// TestListChats_SelfIDFallback is the regression for the live bug where
+// bridges that never set isSender on previews made already-answered chats
+// look like they were waiting on a reply (2026-08-09).
+func TestListChats_SelfIDFallback(t *testing.T) {
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/accounts":
+			_, _ = w.Write([]byte(`[{"accountID":"acct","network":"testnet","user":{"id":"u-self"}}]`))
+		case "/v1/chats":
+			_, _ = w.Write([]byte(`{"items":[
+				{"id":"c-replied","accountID":"acct","network":"testnet","title":"Replied","type":"single",
+				 "lastActivity":"2026-08-09T12:00:00Z",
+				 "preview":{"id":"m1","accountID":"acct","chatID":"c-replied","senderID":"u-self","isSender":false,"sortKey":"1","timestamp":"2026-08-09T12:00:00Z","text":"on my way"}},
+				{"id":"c-waiting","accountID":"acct","network":"testnet","title":"Waiting","type":"single",
+				 "lastActivity":"2026-08-09T12:01:00Z",
+				 "preview":{"id":"m2","accountID":"acct","chatID":"c-waiting","senderID":"u-them","isSender":false,"sortKey":"2","timestamp":"2026-08-09T12:01:00Z","text":"you around?"}}
+			],"hasMore":false,"oldestCursor":"","newestCursor":""}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+
+	chats, err := client.ListChats(context.Background())
+	if err != nil {
+		t.Fatalf("ListChats() error = %v", err)
+	}
+	byID := map[string]api.Chat{}
+	for _, c := range chats {
+		byID[c.ID] = c
+	}
+	if !byID["c-replied"].LastFromMe {
+		t.Error("c-replied: LastFromMe = false, want true via sender-ID fallback")
+	}
+	if byID["c-waiting"].LastFromMe {
+		t.Error("c-waiting: LastFromMe = true, want false")
 	}
 }

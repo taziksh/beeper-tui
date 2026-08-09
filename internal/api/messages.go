@@ -6,6 +6,7 @@ import (
 	"html"
 	"sort"
 	"strings"
+	"time"
 
 	beeperdesktopapi "github.com/beeper/desktop-api-go/v5"
 	"github.com/beeper/desktop-api-go/v5/shared"
@@ -15,7 +16,7 @@ import (
 func (c *Client) ListMessages(ctx context.Context, chatID string) ([]Message, error) {
 	page, err := c.sdk.Messages.List(ctx, escapeChatID(chatID), beeperdesktopapi.MessageListParams{})
 	if err != nil {
-		return nil, fmt.Errorf("api: list messages for %s: %w", chatID, err)
+		return nil, compactErr("list messages", err)
 	}
 	out := make([]Message, 0, len(page.Items))
 	for _, m := range page.Items {
@@ -32,14 +33,49 @@ func (c *Client) ListMessages(ctx context.Context, chatID string) ([]Message, er
 	return out, nil
 }
 
+// SearchQuery filters a message search. Zero fields are omitted from the
+// request. Sender takes "me", "others", or a user ID.
+type SearchQuery struct {
+	Query  string
+	ChatID string
+	Sender string
+	After  time.Time
+	Before time.Time
+	Limit  int
+}
+
 // SearchMessages searches message contents across chats.
 func (c *Client) SearchMessages(ctx context.Context, query string) ([]MessageSearchResult, error) {
-	page, err := c.sdk.Messages.Search(ctx, beeperdesktopapi.MessageSearchParams{
-		Query: beeperdesktopapi.String(query),
-		Limit: beeperdesktopapi.Int(20),
-	})
+	return c.SearchMessagesFiltered(ctx, SearchQuery{Query: query})
+}
+
+// SearchMessagesFiltered searches messages with the full filter set Beeper's
+// index supports: date range, sender, and chat scoping.
+func (c *Client) SearchMessagesFiltered(ctx context.Context, q SearchQuery) ([]MessageSearchResult, error) {
+	params := beeperdesktopapi.MessageSearchParams{}
+	if q.Query != "" {
+		params.Query = beeperdesktopapi.String(q.Query)
+	}
+	if q.ChatID != "" {
+		params.ChatIDs = []string{q.ChatID}
+	}
+	if q.Sender != "" {
+		params.Sender = beeperdesktopapi.String(q.Sender)
+	}
+	if !q.After.IsZero() {
+		params.DateAfter = beeperdesktopapi.Time(q.After)
+	}
+	if !q.Before.IsZero() {
+		params.DateBefore = beeperdesktopapi.Time(q.Before)
+	}
+	limit := q.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+	params.Limit = beeperdesktopapi.Int(int64(limit))
+	page, err := c.sdk.Messages.Search(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("api: search messages: %w", err)
+		return nil, compactErr("search messages", err)
 	}
 	out := make([]MessageSearchResult, 0, len(page.Items))
 	for _, m := range page.Items {

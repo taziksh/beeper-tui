@@ -17,8 +17,31 @@ type Chat struct {
 	Archived         bool
 	MarkedUnread     bool // user manually flagged the chat as unread
 	LastActive       time.Time
-	Preview          string   // plain-text last-message preview, may be empty
-	AllowedReactions []string // network's allowed reaction keys; empty means unrestricted
+	Preview          string        // plain-text last-message preview, may be empty
+	LastFromMe       bool          // the preview message was sent by the authenticated user
+	LastSender       string        // sender name of the preview message, may be empty
+	AllowedReactions []string      // network's allowed reaction keys; empty means unrestricted
+	PreviewSenderID  string        // raw sender ID of the preview message, for self-detection
+	Participants     []Participant // may be a subset on large group chats
+}
+
+// Participant is a member of a chat.
+type Participant struct {
+	UserID   string
+	FullName string
+	Username string
+	IsSelf   bool
+	IsBot    bool // automated network account, e.g. a notification channel
+}
+
+// Contact is a person found via account contact search.
+type Contact struct {
+	AccountID   string
+	UserID      string
+	FullName    string
+	Username    string
+	PhoneNumber string
+	Email       string
 }
 
 // Message is our decoupled view of a single message.
