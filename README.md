@@ -68,6 +68,9 @@ export BEEPER_API_BASE_URL=http://localhost:23373
 - [x] Live inbox via WebSocket events
 - [ ] Search across chats and messages
 - [ ] Attachments, reactions, replies-to-message, threads, edits, deletes
+- [ ] Chat tab: assistant on a local model over chats and messages
+  - [ ] Read-only Q&A
+  - [ ] Send messages
 
 Design specs live in [docs/superpowers/specs](docs/superpowers/specs).
 

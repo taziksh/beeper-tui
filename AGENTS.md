@@ -2,6 +2,10 @@
 
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
+## Project context
+
+- **P1s = chat feature** workstream. Parent issue: `beeper-tui-gbu` (local-LLM chat tab). Children/related: tools tier, PII/frontier identity. Label: `chat`. Treat open P1s as that epic unless priorities change.
+
 ## Quick Reference
 
 ```bash
