@@ -96,11 +96,17 @@ func (m Model) statusBar() string {
 	if m.archivingChatID != "" {
 		return "NORMAL  working…"
 	}
-	archive := "a archive"
-	if m.tab == TabArchive {
-		archive = "a unarchive"
+	return normalBar(m.connStatus())
+}
+
+// normalBar renders the resting status line: just the mode, plus connection
+// state when it is not healthy. Keys live in the README, not the bar.
+func normalBar(conn string) string {
+	conn = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(conn), "·"))
+	if conn == "" {
+		return "NORMAL"
 	}
-	return fmt.Sprintf("NORMAL  %sh/l tab · j/k move · enter open · p preview · %s · / search · q quit", m.connStatus(), archive)
+	return "NORMAL  " + conn
 }
 
 // renderOnboarding is the full-screen state when the chat list cannot load,
@@ -417,10 +423,10 @@ func (m Model) convStatusBar() string {
 		if m.composeErr != nil {
 			return fmt.Sprintf("INSERT  %v · enter send · esc cancel", m.composeErr)
 		}
-		return "INSERT  enter send · ctrl+v attach image · esc cancel"
+		return "INSERT"
 	}
 	if m.mode == ModeReact {
-		return "REACT  1-9 toggle · type name · tab cycle · enter send · esc cancel"
+		return "REACT"
 	}
 	if m.archiveErr != nil {
 		return fmt.Sprintf("NORMAL  archive failed: %v", m.archiveErr)
@@ -434,7 +440,7 @@ func (m Model) convStatusBar() string {
 	if m.archivingChatID != "" {
 		return "NORMAL  archiving…"
 	}
-	return "NORMAL  " + m.connStatus() + "j/k · r react · i reply · o open · a archive · q chats"
+	return normalBar(m.connStatus())
 }
 
 // wrap word-wraps s to width w so long errors stay fully readable instead of

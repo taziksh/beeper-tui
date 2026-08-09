@@ -148,8 +148,8 @@ func TestRender_ConversationLoadError_ShownInBody(t *testing.T) {
 	if !strings.Contains(out, "Alice") {
 		t.Errorf("conversation header (chat title) should still show: %q", out)
 	}
-	if !strings.Contains(out, "q chats") {
-		t.Errorf("status bar with q hint should still show so the user can get out: %q", out)
+	if !strings.Contains(out, "NORMAL") {
+		t.Errorf("status bar should still render on error: %q", out)
 	}
 }
 
@@ -245,11 +245,14 @@ func TestRender_SearchShowsMessageResults(t *testing.T) {
 	}
 }
 
-func TestRender_ListShowsArchiveHint(t *testing.T) {
+func TestRender_ListBarIsTerse(t *testing.T) {
 	m := Model{mode: ModeList, width: 80, height: 24, chats: []api.Chat{{ID: "a", Title: "Alice"}}}
 	out := m.render()
-	if !strings.Contains(out, "a archive") {
-		t.Errorf("list status missing archive hint: %q", out)
+	if !strings.Contains(out, "NORMAL") {
+		t.Errorf("list status missing mode: %q", out)
+	}
+	if strings.Contains(out, "q quit") || strings.Contains(out, "a archive") {
+		t.Errorf("key hints belong in the README, not the bar: %q", out)
 	}
 }
 

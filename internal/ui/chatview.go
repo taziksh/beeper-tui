@@ -150,9 +150,9 @@ func (m Model) chatStatusBar() string {
 		return fmt.Sprintf("%s  ▚ %s · esc stop", m.chatModeLabel(), working)
 	}
 	if m.mode == ModeChatInsert {
-		return "INSERT  enter ask · esc cancel"
+		return "INSERT"
 	}
-	return "NORMAL  i ask · h/l tab · q quit"
+	return "NORMAL"
 }
 
 func (m Model) chatModeLabel() string {

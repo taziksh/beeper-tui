@@ -61,6 +61,42 @@ To override the API base URL (rare):
 export BEEPER_API_BASE_URL=http://localhost:23373
 ```
 
+## Keybindings
+
+### Chat list
+
+| Key | Action |
+| --- | --- |
+| `h` / `l` | Switch tab |
+| `j` / `k` | Move selection |
+| `enter` | Open chat |
+| `p` | Toggle preview |
+| `a` | Archive / unarchive |
+| `/` | Search |
+| `q` | Quit |
+
+### Conversation
+
+| Key | Action |
+| --- | --- |
+| `j` / `k` | Scroll |
+| `i` | Reply |
+| `r` | React |
+| `o` | Open attachment |
+| `ctrl+v` | Attach image from clipboard |
+| `a` | Archive |
+| `q` | Back to list |
+
+### Chat (assistant)
+
+| Key | Action |
+| --- | --- |
+| `i` / `enter` | Ask |
+| `esc` | Stop the response / deselect |
+| `tab` | Cycle names in the answer |
+| `enter` | Open selected name's conversation |
+| `c` | Clear transcript |
+
 ## Roadmap
 
 - [x] Read-only triage
