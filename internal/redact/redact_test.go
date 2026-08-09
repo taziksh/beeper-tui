@@ -28,6 +28,14 @@ func TestRedactCoversVariants(t *testing.T) {
 	}
 }
 
+func TestRedactKeepsPossessive(t *testing.T) {
+	v := testVault()
+	out := v.Redact("dana's plan")
+	if !strings.HasSuffix(strings.Fields(out)[0], "'s") {
+		t.Errorf("possessive lost: %q", out)
+	}
+}
+
 func TestRedactSamePersonSameToken(t *testing.T) {
 	v := testVault()
 	out := v.Redact("Dana Fixture met dana")
