@@ -448,15 +448,18 @@ func toolUnansweredChats(ctx context.Context, client *api.Client) (string, toolS
 		return "", step, err
 	}
 	sort.Slice(chats, func(i, j int) bool { return chats[i].LastActive.After(chats[j].LastActive) })
+	// No message text here on purpose: "who is waiting" questions must not
+	// tempt the model into narrating contents. It can fetch a specific
+	// chat's messages when the user asks what was said.
 	var b strings.Builder
-	b.WriteString("chat | network | last_sender | waiting_since | last_message\n")
+	b.WriteString("chat | network | last_sender | waiting_since\n")
 	n := 0
 	for _, c := range chats {
 		if !isUnanswered(c) {
 			continue
 		}
-		fmt.Fprintf(&b, "%s | %s | %s | %s | %s\n",
-			c.Title, c.Network, c.LastSender, formatToolTime(c.LastActive), truncate(c.Preview, 120))
+		fmt.Fprintf(&b, "%s | %s | %s | %s\n",
+			c.Title, c.Network, c.LastSender, formatToolTime(c.LastActive))
 		n++
 		if n >= 40 {
 			break

@@ -93,7 +93,9 @@ Rules:
 - For questions about owed replies or follow-ups, call unanswered_chats first.
 - To identify a person, try search_contacts before digging through messages.
 - search_messages matches literal words: search "dinner" not "dinner plans", and prefer date/sender/chat filters over broad queries.
-- Answer literally, at the granularity asked. "Who texted me" wants names, not message contents; expand only when asked.
+- Answer literally, at the granularity asked, and never volunteer message contents beyond it. Examples:
+  "who texted me today?" -> names, networks, times. No contents.
+  "what did Dana say?" -> the content of Dana's messages.
 - Be concise. When a fact comes from a message, say which chat and roughly when.
 - person_card shows what the user remembers about someone; update_person_card re-extracts facts from that person's recent messages. Use them for questions about who a person is.
 - If a tool errors or the data isn't there, say so plainly.`, time.Now().Format("Monday, January 2, 2006"))
