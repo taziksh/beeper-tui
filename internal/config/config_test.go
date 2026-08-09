@@ -64,7 +64,7 @@ func TestBaseURL_HonorsEnvOverride(t *testing.T) {
 
 func TestLoad_AssemblesAllFields(t *testing.T) {
 	t.Setenv("BEEPER_ACCESS_TOKEN", "tok")
-	t.Setenv("BEEPER_API_BASE_URL", "http://x.test")
+	t.Setenv("BEEPER_API_BASE_URL", "http://127.0.0.1:9999")
 
 	got, err := config.Load()
 	if err != nil {
@@ -73,13 +73,43 @@ func TestLoad_AssemblesAllFields(t *testing.T) {
 	if got.Token != "tok" {
 		t.Errorf("Token = %q, want %q", got.Token, "tok")
 	}
-	if got.BaseURL != "http://x.test" {
-		t.Errorf("BaseURL = %q, want %q", got.BaseURL, "http://x.test")
+	if got.BaseURL != "http://127.0.0.1:9999" {
+		t.Errorf("BaseURL = %q, want %q", got.BaseURL, "http://127.0.0.1:9999")
 	}
 	if got.ConfigDir == "" {
 		t.Error("ConfigDir is empty")
 	}
 	if got.CacheDir == "" {
 		t.Error("CacheDir is empty")
+	}
+}
+
+func TestLoad_RefusesRemoteEndpoints(t *testing.T) {
+	t.Setenv("BEEPER_TUI_ALLOW_REMOTE", "")
+	t.Setenv("BEEPER_LLM_BASE_URL", "https://api.example.com/v1")
+	if _, err := config.Load(); err == nil {
+		t.Fatal("Load() with remote LLM endpoint = nil error, want refusal")
+	}
+	t.Setenv("BEEPER_LLM_BASE_URL", "")
+	t.Setenv("BEEPER_API_BASE_URL", "http://10.0.0.5:23373")
+	if _, err := config.Load(); err == nil {
+		t.Fatal("Load() with remote API endpoint = nil error, want refusal")
+	}
+}
+
+func TestLoad_AllowsLocalEndpoints(t *testing.T) {
+	for _, u := range []string{"http://127.0.0.1:1234/v1", "http://localhost:1234/v1", "http://[::1]:1234/v1"} {
+		t.Setenv("BEEPER_LLM_BASE_URL", u)
+		if _, err := config.Load(); err != nil {
+			t.Errorf("Load() with %s error = %v, want nil", u, err)
+		}
+	}
+}
+
+func TestLoad_RemoteOptOut(t *testing.T) {
+	t.Setenv("BEEPER_LLM_BASE_URL", "https://api.example.com/v1")
+	t.Setenv("BEEPER_TUI_ALLOW_REMOTE", "1")
+	if _, err := config.Load(); err != nil {
+		t.Errorf("Load() with opt-out error = %v, want nil", err)
 	}
 }
