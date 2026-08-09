@@ -8,7 +8,10 @@ require (
 	github.com/beeper/desktop-api-go/v5 v5.0.1
 	github.com/coder/websocket v1.8.14
 	github.com/forPelevin/gomoji v1.4.1
+	github.com/lithammer/fuzzysearch v1.1.8
 	golang.org/x/image v0.42.0
+	golang.org/x/text v0.38.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -29,6 +32,6 @@ require (
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
 )
