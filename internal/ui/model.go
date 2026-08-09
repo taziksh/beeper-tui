@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/taziksh/beeper-tui/internal/api"
+	"github.com/taziksh/beeper-tui/internal/llm"
+	"github.com/taziksh/beeper-tui/internal/person"
 	"github.com/taziksh/beeper-tui/internal/ws"
 )
 
@@ -16,6 +18,8 @@ const (
 	ModeInsert
 	ModeSearch
 	ModeReact
+	ModeChat
+	ModeChatInsert
 )
 
 // ConnState is the live-events connection state shown in the status bar.
@@ -90,6 +94,21 @@ type Model struct {
 	searchLoading  bool
 	searchErr      error
 
+	// chat tab (local-LLM assistant) state
+	llm           *llm.Client
+	people        *person.Store
+	chatModel     string // model id shown in the status bar, "" until detected
+	chatDetecting bool
+	chatErr       error
+	chatTurns     []chatTurn
+	chatInput     string
+	chatSession   *chatSession
+	chatOffset    int  // first visible transcript line
+	chatFollow    bool // pinned to the transcript bottom while streaming
+	chatTokens    int  // streamed tokens in the current response
+	chatStarted   time.Time
+	chatReasoning int // hidden reasoning tokens in the current response
+
 	width  int
 	height int
 
@@ -107,7 +126,20 @@ type Model struct {
 // New builds the initial model. The chat fetch happens in Init, not here.
 // events may be nil, which disables live updates.
 func New(client *api.Client, events *ws.Client) Model {
-	return Model{client: client, events: events, mode: ModeList, loadingChats: true, failedSends: map[string]failedSend{}}
+	return Model{client: client, events: events, mode: ModeList, loadingChats: true, failedSends: map[string]failedSend{}, chatFollow: true}
+}
+
+// WithLLM attaches the local-model client backing the chat tab. A nil client
+// leaves the tab in its setup-help state.
+func (m Model) WithLLM(c *llm.Client) Model {
+	m.llm = c
+	return m
+}
+
+// WithPeople attaches the person-card store used by the chat tools.
+func (m Model) WithPeople(s *person.Store) Model {
+	m.people = s
+	return m
 }
 
 // failedSend records why an optimistic send errored, plus the draft needed

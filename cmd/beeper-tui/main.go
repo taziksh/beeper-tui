@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,12 +12,17 @@ import (
 	"github.com/taziksh/beeper-tui/internal/api"
 	"github.com/taziksh/beeper-tui/internal/config"
 	"github.com/taziksh/beeper-tui/internal/launch"
+	"github.com/taziksh/beeper-tui/internal/llm"
+	"github.com/taziksh/beeper-tui/internal/person"
 	"github.com/taziksh/beeper-tui/internal/state"
 	"github.com/taziksh/beeper-tui/internal/ui"
 	"github.com/taziksh/beeper-tui/internal/ws"
 )
 
 func main() {
+	unansweredDebug := flag.Bool("unanswered-debug", false, "print per-chat unanswered-filter signals (no names or text) and exit")
+	flag.Parse()
+
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "config: %v\n", err)
@@ -33,6 +39,15 @@ func main() {
 	}
 
 	client := api.New(cfg)
+
+	if *unansweredDebug {
+		if err := ui.PrintUnansweredDebug(context.Background(), client, os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	events := ws.New(cfg)
 	defer events.Close()
 
@@ -44,7 +59,23 @@ func main() {
 	}
 	cached, _ := state.Load(cachePath)
 
-	final, err := tea.NewProgram(ui.New(client, events).WithCache(cached, cachePath)).Run()
+	assistant := llm.New(cfg.LLMBaseURL, cfg.LLMModel)
+
+	// Person cards live with config, not cache: they are user data, edited by
+	// hand as much as by extraction.
+	people, err := person.NewStore(filepath.Join(cfg.ConfigDir, "people"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "person store: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Background sweep: keep card gaps filled from recent messages without
+	// anyone asking. Best-effort; dies with the program.
+	sweepCtx, stopSweep := context.WithCancel(context.Background())
+	defer stopSweep()
+	go person.Sweep(sweepCtx, client, assistant, people, 10)
+
+	final, err := tea.NewProgram(ui.New(client, events).WithCache(cached, cachePath).WithLLM(assistant).WithPeople(people)).Run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tui: %v\n", err)
 		os.Exit(1)

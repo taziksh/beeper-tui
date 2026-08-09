@@ -48,14 +48,14 @@ func TestCycleTab_WrapsAndSelectsFirstChat(t *testing.T) {
 		},
 		selected: 0,
 	}
-	m = m.cycleTab(1) // Inbox -> Unread
+	m, _ = m.cycleTab(1) // Inbox -> Unread
 	if m.tab != TabUnread {
 		t.Fatalf("tab = %v, want TabUnread", m.tab)
 	}
 	if m.chats[m.selected].ID != "b" {
 		t.Errorf("selected = %q, want b (first chat in Unread)", m.chats[m.selected].ID)
 	}
-	m = m.cycleTab(-1) // back to Inbox
+	m, _ = m.cycleTab(-1) // back to Inbox
 	if m.tab != TabInbox {
 		t.Errorf("tab = %v, want TabInbox after reverse cycle", m.tab)
 	}

@@ -258,7 +258,8 @@ func (m Model) visibleChatIndexes() []int {
 }
 
 // cycleTab switches to the next or previous tab and selects its first chat.
-func (m Model) cycleTab(dir int) Model {
+// Landing on the Chat tab enters ModeChat; leaving it returns to ModeList.
+func (m Model) cycleTab(dir int) (Model, tea.Cmd) {
 	cur := 0
 	for i, t := range tabOrder {
 		if t == m.tab {
@@ -267,11 +268,17 @@ func (m Model) cycleTab(dir int) Model {
 		}
 	}
 	m.tab = tabOrder[(cur+dir+len(tabOrder))%len(tabOrder)]
+	if m.tab.chatTab() {
+		return m.enterChatTab()
+	}
+	if m.mode == ModeChat {
+		m.mode = ModeList
+	}
 	m.offset = 0
 	if indexes := m.visibleChatIndexes(); len(indexes) > 0 {
 		m.selected = indexes[0]
 	}
-	return m.clampWindow()
+	return m.clampWindow(), m.previewLoad()
 }
 
 func (m Model) selectedVisibleChatPos(indexes []int) int {
@@ -597,14 +604,12 @@ func (m Model) handleKey(key string) (Model, tea.Cmd) {
 		return m, m.previewLoad()
 	case "l", "right", "tab":
 		if m.mode == ModeList {
-			m = m.cycleTab(1)
-			return m, m.previewLoad()
+			return m.cycleTab(1)
 		}
 		return m, nil
 	case "h", "left", "shift+tab":
 		if m.mode == ModeList {
-			m = m.cycleTab(-1)
-			return m, m.previewLoad()
+			return m.cycleTab(-1)
 		}
 		return m, nil
 	case "G":

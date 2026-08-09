@@ -73,12 +73,19 @@ func seed() *server {
 		chats: []chat{
 			{ID: "stub-dm", AccountID: "stubacct", Network: "stubnet", Title: "Ada Testface", Type: "single", LastActivity: now},
 			{ID: "stub-group", AccountID: "stubacct", Network: "stubnet", Title: "Fixture Friends", Type: "group", UnreadCount: 2, LastActivity: now.Add(-time.Hour)},
+			{ID: "stub-dana", AccountID: "stubacct", Network: "stubnet", Title: "Dana Fixture", Type: "single", UnreadCount: 1, LastActivity: now.Add(-26 * time.Hour)},
 		},
 		msgs:    map[string][]message{},
 		uploads: map[string]attachment{},
 	}
 	s.append("stub-dm", message{SenderID: "u-ada", SenderName: "Ada Testface", Text: "hello from the stub", Timestamp: now.Add(-2 * time.Minute)})
 	s.append("stub-group", message{SenderID: "u-ada", SenderName: "Ada Testface", Text: "synthetic group chatter", Timestamp: now.Add(-time.Hour)})
+	s.append("stub-group", message{SenderID: "u-ada", SenderName: "Ada Testface", Text: "cabin trip is July 18-20 at Big Bear, confirm by Friday", Timestamp: now.Add(-50 * time.Minute)})
+	s.append("stub-dana", message{SenderID: "u-self", SenderName: "Stub Self", Text: "how was the housewarming?", IsSender: true, Timestamp: now.Add(-30 * time.Hour)})
+	s.append("stub-dana", message{SenderID: "u-dana", SenderName: "Dana Fixture", Text: "great! my partner Sam cooked for everyone", Timestamp: now.Add(-28 * time.Hour)})
+	s.append("stub-dana", message{SenderID: "u-dana", SenderName: "Dana Fixture", Text: "we're in toronto now btw, moved last month", Timestamp: now.Add(-27 * time.Hour)})
+	s.append("stub-dana", message{SenderID: "u-dana", SenderName: "Dana Fixture", Text: "been obsessed with climbing lately, gym every week", Timestamp: now.Add(-27 * time.Hour)})
+	s.append("stub-dana", message{SenderID: "u-dana", SenderName: "Dana Fixture", Text: "also you still owe me $12 for lunch btw", IsUnread: true, Timestamp: now.Add(-26 * time.Hour)})
 	return s
 }
 
@@ -143,10 +150,75 @@ func main() {
 		writeJSON(w, page(items))
 	})
 
+	mux.HandleFunc("GET /v1/chats/search", func(w http.ResponseWriter, r *http.Request) {
+		q := strings.ToLower(r.URL.Query().Get("query"))
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		items := []map[string]any{}
+		for _, c := range s.chats {
+			if q != "" && !strings.Contains(strings.ToLower(c.Title), q) {
+				continue
+			}
+			var m map[string]any
+			b, _ := json.Marshal(c)
+			if err := json.Unmarshal(b, &m); err != nil {
+				continue
+			}
+			m["participants"] = page([]any{})
+			m["capabilities"] = map[string]any{}
+			items = append(items, m)
+		}
+		writeJSON(w, page(items))
+	})
+
 	mux.HandleFunc("GET /v1/chats/{chat}/messages", func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		writeJSON(w, page(s.msgs[r.PathValue("chat")]))
+	})
+
+	stubContacts := []map[string]any{
+		{"id": "u-ada", "fullName": "Ada Testface", "username": "@ada", "phoneNumber": "+15550000001"},
+		{"id": "u-dana", "fullName": "Dana Fixture", "username": "@dana", "phoneNumber": "+15550000002", "email": "dana@example.test"},
+		{"id": "u-renee", "fullName": "Renée Contactonly", "username": "@renee"},
+	}
+
+	mux.HandleFunc("GET /v1/accounts/{account}/contacts", func(w http.ResponseWriter, r *http.Request) {
+		q := strings.ToLower(r.URL.Query().Get("query"))
+		hits := []map[string]any{}
+		for _, u := range stubContacts {
+			if q == "" || strings.Contains(strings.ToLower(u["fullName"].(string)), q) {
+				hits = append(hits, u)
+			}
+		}
+		writeJSON(w, map[string]any{"items": hits})
+	})
+
+	mux.HandleFunc("GET /v1/accounts/{account}/contacts/list", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, page(stubContacts))
+	})
+
+	mux.HandleFunc("POST /v1/chats/{chat}/reminders", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	mux.HandleFunc("DELETE /v1/chats/{chat}/reminders", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	mux.HandleFunc("GET /v1/messages/search", func(w http.ResponseWriter, r *http.Request) {
+		q := strings.ToLower(r.URL.Query().Get("query"))
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		hits := []message{}
+		for _, ms := range s.msgs {
+			for _, m := range ms {
+				if q != "" && strings.Contains(strings.ToLower(m.Text), q) {
+					hits = append(hits, m)
+				}
+			}
+		}
+		writeJSON(w, page(hits))
 	})
 
 	mux.HandleFunc("POST /v1/chats/{chat}/messages", func(w http.ResponseWriter, r *http.Request) {

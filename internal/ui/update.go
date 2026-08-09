@@ -162,6 +162,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		return m.clampWindow(), nil
+	case chatEventMsg:
+		return m.applyChatEvent(msg.ev)
+	case chatModelMsg:
+		m.chatDetecting = false
+		if msg.err != nil {
+			m.chatErr = msg.err
+			return m, nil
+		}
+		m.chatErr = nil
+		m.chatModel = msg.id
+		return m, nil
 	case tea.KeyPressMsg:
 		if m.mode == ModeInsert {
 			return m.handleInsertKey(msg.String(), msg.Text)
@@ -171,6 +182,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.mode == ModeReact {
 			return m.handleReactKey(msg.String(), msg.Text)
+		}
+		if m.mode == ModeChatInsert {
+			return m.handleChatInsertKey(msg.String(), msg.Text)
+		}
+		if m.mode == ModeChat {
+			return m.handleChatKey(msg.String())
 		}
 		return m.handleKey(msg.String())
 	}

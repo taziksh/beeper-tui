@@ -14,10 +14,18 @@ const (
 	TabPinned
 	TabLowPriority
 	TabArchive
+	// TabChat is not a chat-list filter: it hosts the local-LLM assistant
+	// via ModeChat.
+	TabChat
 )
 
 // tabOrder is the left-to-right tab bar order, also the order h/l cycle through.
-var tabOrder = []Tab{TabInbox, TabUnread, TabMentions, TabPinned, TabLowPriority, TabArchive}
+var tabOrder = []Tab{TabInbox, TabUnread, TabMentions, TabPinned, TabLowPriority, TabArchive, TabChat}
+
+// chatTab reports whether t hosts the assistant.
+func (t Tab) chatTab() bool {
+	return t == TabChat
+}
 
 // label is the tab's name as shown in the tab bar.
 func (t Tab) label() string {
@@ -32,6 +40,8 @@ func (t Tab) label() string {
 		return "Low Priority"
 	case TabArchive:
 		return "Archive"
+	case TabChat:
+		return "Chat"
 	default:
 		return "Inbox"
 	}
@@ -52,7 +62,7 @@ func (t Tab) includes(c api.Chat) bool {
 		return c.Pinned
 	case TabLowPriority:
 		return c.LowPriority || c.Muted
-	case TabArchive:
+	case TabArchive, TabChat:
 		return false
 	default: // TabInbox
 		return !c.LowPriority && !c.Muted

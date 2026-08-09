@@ -30,6 +30,8 @@ func (m Model) render() string {
 		return m.renderConversation()
 	case ModeSearch:
 		return m.renderSearch()
+	case ModeChat, ModeChatInsert:
+		return m.renderChat()
 	default:
 		return m.renderList()
 	}
