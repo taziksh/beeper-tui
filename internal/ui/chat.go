@@ -111,7 +111,7 @@ func (m Model) enterChatTab() (Model, tea.Cmd) {
 	if m.chatModel == "" && m.llm.Model() != "" {
 		m.chatModel = m.llm.Model()
 	}
-	if m.chatModel == "" && !m.chatDetecting {
+	if !m.chatChecked && !m.chatDetecting {
 		m.chatDetecting = true
 		return m, m.detectModelCmd()
 	}
@@ -126,12 +126,23 @@ func (m Model) detectModelCmd() tea.Cmd {
 	}
 }
 
+func (m Model) retryChatEndpoint() (Model, tea.Cmd) {
+	if m.llm == nil || m.chatDetecting || m.chatSession != nil {
+		return m, nil
+	}
+	m.chatErr = nil
+	m.chatChecked = false
+	m.chatDetecting = true
+	return m, m.detectModelCmd()
+}
+
 // submitChatInput sends the typed question: appends the user turn plus a
 // streaming assistant turn and starts the session goroutine.
 func (m Model) submitChatInput() (Model, tea.Cmd) {
 	if m.chatInput == "" || m.chatSession != nil || m.llm == nil {
 		return m, nil
 	}
+	m.chatErr = nil
 	history := m.chatHistory()
 	history = append(history, llm.Message{Role: "user", Content: m.chatInput})
 	m.chatTurns = append(m.chatTurns,
@@ -255,6 +266,7 @@ func (m Model) applyChatEvent(ev chatEvent) (Model, tea.Cmd) {
 	turn := &m.chatTurns[len(m.chatTurns)-1]
 	switch ev.kind {
 	case chatEvToken:
+		m.chatErr = nil
 		text := ev.text
 		if turn.text == "" {
 			// Reasoning models emit stray newlines before the first visible
@@ -266,6 +278,7 @@ func (m Model) applyChatEvent(ev chatEvent) (Model, tea.Cmd) {
 	case chatEvReasoning:
 		m.chatReasoning++
 	case chatEvToolStart:
+		m.chatErr = nil
 		turn.steps = append(turn.steps, ev.step)
 	case chatEvToolEnd:
 		// Complete the newest running step with the same name.
@@ -277,11 +290,13 @@ func (m Model) applyChatEvent(ev chatEvent) (Model, tea.Cmd) {
 		}
 	case chatEvErr:
 		turn.streaming = false
-		turn.errText = ev.err.Error()
+		turn.errText = m.chatRuntimeError(ev.err)
+		m.chatErr = ev.err
 		m.chatSession = nil
 		return m.chatClampFollow(), nil
 	case chatEvDone:
 		turn.streaming = false
+		m.chatErr = nil
 		m.chatSession = nil
 		m.chatLinks = findChatLinks(turn.text, m.chats)
 		m.chatLinkSel = -1
@@ -387,6 +402,11 @@ func (m Model) handleChatKey(key string) (Model, tea.Cmd) {
 			m.chatTurns = nil
 			m.chatOffset = 0
 			m.chatFollow = true
+		}
+		return m, nil
+	case "r":
+		if m.chatErr != nil {
+			return m.retryChatEndpoint()
 		}
 		return m, nil
 	case "j", "down":

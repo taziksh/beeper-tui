@@ -37,12 +37,12 @@ func (m Model) chatLines() []string {
 	if m.llm == nil {
 		return []string{
 			"",
-			"  No local model endpoint configured.",
-			"  Start LM Studio's server (lms server start) or set BEEPER_LLM_BASE_URL.",
+			"  Local assistant is not configured.",
+			"  Attach an OpenAI-compatible local model server to enable this optional tab.",
 		}
 	}
 	if len(m.chatTurns) == 0 {
-		return nil
+		return m.chatSetupLines()
 	}
 	var lines []string
 	for i, t := range m.chatTurns {
@@ -98,9 +98,68 @@ func (m Model) chatTurnLines(t chatTurn, width int) []string {
 		}
 	}
 	if t.errText != "" {
-		lines = append(lines, "       ! "+truncate(t.errText, 70))
+		for i, line := range wrapLines(t.errText, width-2) {
+			prefix := "       ! "
+			if i > 0 {
+				prefix = "         "
+			}
+			lines = append(lines, prefix+line)
+		}
 	}
 	return lines
+}
+
+// chatSetupLines makes the Chat tab's external runtime dependency explicit.
+// The inbox remains usable when this optional local server is unavailable.
+func (m Model) chatSetupLines() []string {
+	model := m.chatModel
+	if model == "" {
+		model = "auto-detect"
+	}
+	status := "ready"
+	if m.chatDetecting {
+		status = "checking…"
+	} else if m.chatErr != nil {
+		status = "unavailable"
+	} else if !m.chatChecked {
+		status = "not checked"
+	}
+	lines := []string{
+		"",
+		"  Local assistant (optional)",
+		"  Requires a running OpenAI-compatible model server; the default is LM Studio.",
+		"  Endpoint  " + m.llm.BaseURL(),
+		"  Model     " + model,
+		"  Status    " + status,
+		"",
+	}
+	if m.chatErr != nil {
+		lines = append(lines, wrapLines(m.chatRuntimeError(m.chatErr), m.chatTextWidth())...)
+		lines = append(lines, "")
+	}
+	return append(lines,
+		"  Default: load a chat model in LM Studio and start its local server",
+		"  (`lms server start`). For another local server, set BEEPER_LLM_BASE_URL",
+		"  and optionally BEEPER_LLM_MODEL before launching beeper-tui.",
+		"  Press r to recheck the endpoint after starting it.",
+	)
+}
+
+// chatRuntimeError turns low-level HTTP errors into a persistent, actionable
+// explanation while retaining the useful underlying detail.
+func (m Model) chatRuntimeError(err error) string {
+	if err == nil {
+		return ""
+	}
+	detail := strings.TrimSpace(err.Error())
+	if len(detail) > 180 {
+		detail = truncate(detail, 180)
+	}
+	endpoint := "the configured endpoint"
+	if m.llm != nil {
+		endpoint = m.llm.BaseURL()
+	}
+	return fmt.Sprintf("Local assistant unavailable at %s: %s. Start LM Studio's local server and load a chat model, or verify BEEPER_LLM_BASE_URL and BEEPER_LLM_MODEL.", endpoint, detail)
 }
 
 // chatThinkingLabel is the placeholder while the model reasons before any
@@ -138,7 +197,10 @@ func wrapLines(text string, width int) []string {
 
 func (m Model) chatStatusBar() string {
 	if m.chatErr != nil {
-		return fmt.Sprintf("NORMAL  chat: %v · lms server start", m.chatErr)
+		return "NORMAL  local assistant unavailable · see error above"
+	}
+	if m.chatDetecting {
+		return "NORMAL  local assistant · checking endpoint…"
 	}
 	if m.chatSession != nil {
 		working := "working"
@@ -152,7 +214,10 @@ func (m Model) chatStatusBar() string {
 	if m.mode == ModeChatInsert {
 		return "INSERT"
 	}
-	return "NORMAL"
+	if m.chatModel != "" {
+		return "NORMAL  local assistant · " + m.chatModel
+	}
+	return "NORMAL  local assistant"
 }
 
 func (m Model) chatModeLabel() string {

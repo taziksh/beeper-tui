@@ -116,6 +116,13 @@ func TestApplyChatEventError(t *testing.T) {
 	if m.chatSession != nil {
 		t.Error("session not cleared on error")
 	}
+	if !strings.Contains(turn.errText, "Local assistant unavailable") ||
+		!strings.Contains(turn.errText, "BEEPER_LLM_BASE_URL") {
+		t.Errorf("error is not actionable: %q", turn.errText)
+	}
+	if m.chatErr == nil || !strings.Contains(m.chatStatusBar(), "unavailable") {
+		t.Errorf("provider failure was not kept visible: err=%v status=%q", m.chatErr, m.chatStatusBar())
+	}
 }
 
 func TestCancelChatSessionKeepsPartialText(t *testing.T) {
@@ -198,7 +205,52 @@ func TestRenderChatNoLLM(t *testing.T) {
 	m.mode = ModeChat
 	m.tab = TabChat
 	out := m.renderChat()
-	if !strings.Contains(out, "No local model endpoint configured") {
+	if !strings.Contains(out, "Local assistant is not configured") {
 		t.Errorf("missing setup help:\n%s", out)
+	}
+}
+
+func TestRenderChatExplainsLocalRuntimeAndConfiguration(t *testing.T) {
+	m := chatModelForTest()
+	m.mode = ModeChat
+	m.tab = TabChat
+	m.chatChecked = true
+	out := m.renderChat()
+	for _, want := range []string{
+		"Local assistant (optional)",
+		"default is LM Studio",
+		"Endpoint  http://127.0.0.1:0/v1",
+		"Model     test-model",
+		"Status    ready",
+		"BEEPER_LLM_BASE_URL",
+		"BEEPER_LLM_MODEL",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("setup view missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestRenderChatShowsActionableDetectionFailure(t *testing.T) {
+	m := chatModelForTest()
+	m.mode = ModeChat
+	m.tab = TabChat
+	m.chatChecked = true
+	m.chatErr = errors.New("dial tcp 127.0.0.1:1234: connect: connection refused")
+	out := m.renderChat()
+	for _, want := range []string{"Status    unavailable", "Local assistant unavailable", "connection refused", "LM Studio", "BEEPER_LLM_BASE_URL", "Press r to recheck"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("failure view missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestRetryChatEndpointClearsFailureAndChecksAgain(t *testing.T) {
+	m := chatModelForTest()
+	m.chatChecked = true
+	m.chatErr = errors.New("connection refused")
+	m, cmd := m.handleChatKey("r")
+	if cmd == nil || !m.chatDetecting || m.chatChecked || m.chatErr != nil {
+		t.Errorf("retry state = detecting %t checked %t err %v cmd nil %t", m.chatDetecting, m.chatChecked, m.chatErr, cmd == nil)
 	}
 }

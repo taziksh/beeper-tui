@@ -166,6 +166,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.applyChatEvent(msg.ev)
 	case chatModelMsg:
 		m.chatDetecting = false
+		m.chatChecked = true
 		if msg.err != nil {
 			m.chatErr = msg.err
 			return m, nil

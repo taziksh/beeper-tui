@@ -36,11 +36,15 @@ func New(baseURL, model string) *Client {
 // Model returns the model id requests use.
 func (c *Client) Model() string { return c.model }
 
+// BaseURL returns the OpenAI-compatible endpoint requests use.
+func (c *Client) BaseURL() string { return c.baseURL }
+
 // SetModel overrides the model id.
 func (c *Client) SetModel(id string) { c.model = id }
 
-// DetectModel asks the server for its model list and picks the first entry
-// that does not look like an embedding model. It also stores the pick.
+// DetectModel asks the server for its model list. It keeps an explicitly
+// configured model; otherwise it picks and stores the first non-embedding
+// model. In both cases the request doubles as an endpoint availability check.
 func (c *Client) DetectModel(ctx context.Context) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -63,6 +67,12 @@ func (c *Client) DetectModel(ctx context.Context) (string, error) {
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return "", err
+	}
+	// A configured model is authoritative. We still call /models so entering
+	// the Chat tab verifies that the optional local server is reachable, but
+	// must not silently replace BEEPER_LLM_MODEL with the server's first model.
+	if c.model != "" {
+		return c.model, nil
 	}
 	for _, m := range body.Data {
 		if strings.Contains(strings.ToLower(m.ID), "embed") {

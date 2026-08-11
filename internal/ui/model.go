@@ -99,6 +99,7 @@ type Model struct {
 	people        *person.Store
 	chatModel     string // model id shown in the status bar, "" until detected
 	chatDetecting bool
+	chatChecked   bool // endpoint has been checked at least once this session
 	chatErr       error
 	chatTurns     []chatTurn
 	chatInput     string

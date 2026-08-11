@@ -120,6 +120,27 @@ func TestDetectModelSkipsEmbeddings(t *testing.T) {
 	}
 }
 
+func TestDetectModelKeepsConfiguredModelWhileCheckingServer(t *testing.T) {
+	requested := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requested = true
+		fmt.Fprint(w, `{"data":[{"id":"different-server-default"}]}`)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL+"/v1", "configured-model")
+	id, err := c.DetectModel(context.Background())
+	if err != nil {
+		t.Fatalf("DetectModel: %v", err)
+	}
+	if !requested {
+		t.Fatal("DetectModel did not check the configured endpoint")
+	}
+	if id != "configured-model" || c.Model() != "configured-model" {
+		t.Errorf("model = %q, want configured-model", id)
+	}
+}
+
 func TestCompleteReadsReasoningChannel(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"","reasoning_content":"{\"city\":\"toronto\"}"}}]}`))
