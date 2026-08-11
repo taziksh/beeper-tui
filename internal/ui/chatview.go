@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -37,12 +38,13 @@ func (m Model) chatLines() []string {
 	if m.llm == nil {
 		return []string{
 			"",
-			"  Local assistant is not configured.",
-			"  Attach an OpenAI-compatible local model server to enable this optional tab.",
+			"  Assistant isn't configured",
+			"",
+			"  Chat needs a separate OpenAI-compatible model server.",
 		}
 	}
 	if len(m.chatTurns) == 0 {
-		return m.chatSetupLines()
+		return m.chatLandingLines()
 	}
 	var lines []string
 	for i, t := range m.chatTurns {
@@ -109,57 +111,177 @@ func (m Model) chatTurnLines(t chatTurn, width int) []string {
 	return lines
 }
 
-// chatSetupLines makes the Chat tab's external runtime dependency explicit.
-// The inbox remains usable when this optional local server is unavailable.
-func (m Model) chatSetupLines() []string {
-	model := m.chatModel
-	if model == "" {
-		model = "auto-detect"
-	}
-	status := "ready"
-	if m.chatDetecting {
-		status = "checking…"
-	} else if m.chatErr != nil {
-		status = "unavailable"
-	} else if !m.chatChecked {
-		status = "not checked"
-	}
-	lines := []string{
-		"",
-		"  Local assistant (optional)",
-		"  Requires a running OpenAI-compatible model server; the default is LM Studio.",
-		"  Endpoint  " + m.llm.BaseURL(),
-		"  Model     " + model,
-		"  Status    " + status,
-		"",
+// chatLandingLines uses progressive disclosure: the healthy empty state is
+// about what Chat can do; runtime setup details appear only while connecting
+// or when the optional model server needs attention.
+func (m Model) chatLandingLines() []string {
+	if m.chatDetecting || !m.chatChecked {
+		return m.chatConnectingLines()
 	}
 	if m.chatErr != nil {
-		lines = append(lines, wrapLines(m.chatRuntimeError(m.chatErr), m.chatTextWidth())...)
-		lines = append(lines, "")
+		return m.chatUnavailableLines(m.chatErr)
 	}
-	return append(lines,
-		"  Default: load a chat model in LM Studio and start its local server",
-		"  (`lms server start`). For another local server, set BEEPER_LLM_BASE_URL",
-		"  and optionally BEEPER_LLM_MODEL before launching beeper-tui.",
-		"  Press r to recheck the endpoint after starting it.",
-	)
+	return m.chatReadyLines()
 }
 
-// chatRuntimeError turns low-level HTTP errors into a persistent, actionable
-// explanation while retaining the useful underlying detail.
-func (m Model) chatRuntimeError(err error) string {
+func (m Model) chatReadyLines() []string {
+	server := m.chatServer()
+	model := m.chatModel
+	if model == "" {
+		model = "auto-detected model"
+	}
+	lines := []string{"", "  Ask about your messages", ""}
+	lines = append(lines, m.chatBodyLines("Search conversations, trace follow-ups, or ask about something you remember.")...)
+	lines = append(lines, "")
+	lines = append(lines, m.chatBodyLines(fmt.Sprintf("● %s · %s", server.name, model))...)
+	return append(lines, "", "  › Press enter to ask")
+}
+
+func (m Model) chatConnectingLines() []string {
+	server := m.chatServer()
+	lines := []string{"", fmt.Sprintf("  Connecting to %s…", server.name), ""}
+	lines = append(lines, m.chatBodyLines("Chat uses a separate model server. The rest of beeper-tui works without it.")...)
+	lines = append(lines, "")
+	return append(lines, m.chatBodyLines(server.address)...)
+}
+
+func (m Model) chatUnavailableLines(err error) []string {
+	server := m.chatServer()
+	failure := chatFailureFor(err, server)
+	lines := []string{"", "  ! " + failure.title, ""}
+	lines = append(lines, m.chatBodyLines(failure.summary)...)
+	lines = append(lines, m.chatBodyLines(failure.action)...)
+	lines = append(lines, "", "  › Press enter to try again", "")
+	if failure.command != "" {
+		lines = append(lines, m.chatBodyLines("Command  "+failure.command)...)
+	}
+	lines = append(lines, m.chatBodyLines("Error    "+chatErrorDetail(err))...)
+	lines = append(lines, m.chatBodyLines(fmt.Sprintf("Server   %s · %s", server.name, server.address))...)
+	if failure.config != "" {
+		lines = append(lines, m.chatBodyLines("Config   "+failure.config)...)
+	}
+	return lines
+}
+
+// chatBodyLines wraps secondary copy inside the two-column body inset.
+func (m Model) chatBodyLines(text string) []string {
+	width := m.width - 2
+	if width < 20 {
+		width = 20
+	}
+	wrapped := wrapLines(text, width)
+	for i := range wrapped {
+		wrapped[i] = "  " + strings.TrimRight(wrapped[i], " ")
+	}
+	return wrapped
+}
+
+type chatServerInfo struct {
+	name    string
+	address string
+}
+
+func (m Model) chatServer() chatServerInfo {
+	info := chatServerInfo{name: "model server", address: "configured endpoint"}
+	if m.llm == nil {
+		return info
+	}
+	raw := m.llm.BaseURL()
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		info.address = raw
+		return info
+	}
+	info.address = u.Host
+	if path := strings.TrimRight(u.Path, "/"); path != "" && path != "/v1" {
+		info.address += path
+	}
+	switch u.Port() {
+	case "1234":
+		info.name = "LM Studio"
+	case "11434":
+		info.name = "Ollama"
+	}
+	return info
+}
+
+type chatFailure struct {
+	title   string
+	summary string
+	action  string
+	command string
+	config  string
+}
+
+func chatFailureFor(err error, server chatServerInfo) chatFailure {
+	detail := strings.ToLower(chatErrorDetail(err))
+	switch {
+	case strings.Contains(detail, "no chat model"),
+		strings.Contains(detail, "model not found"),
+		strings.Contains(detail, "unknown model"):
+		return chatFailure{
+			title:   "No chat model is available",
+			summary: fmt.Sprintf("%s is responding, but Chat could not find the model it needs.", server.name),
+			action:  "Load a chat model, or set BEEPER_LLM_MODEL to one the server provides.",
+			config:  "BEEPER_LLM_MODEL",
+		}
+	case strings.Contains(detail, "connection refused"),
+		strings.Contains(detail, "dial tcp"),
+		strings.Contains(detail, "no such host"),
+		strings.Contains(detail, "timeout"),
+		strings.Contains(detail, "timed out"),
+		strings.Contains(detail, "deadline exceeded"):
+		action := "Start the server and make sure its OpenAI-compatible API is available."
+		command := ""
+		config := ""
+		switch server.name {
+		case "LM Studio":
+			action = "Open LM Studio, load a chat model, and start Local Server."
+			command = "lms server start"
+			config = "BEEPER_LLM_BASE_URL"
+		case "Ollama":
+			action = "Start Ollama and make sure a chat model is installed."
+		}
+		return chatFailure{
+			title:   "Can't reach " + server.name,
+			summary: fmt.Sprintf("Chat depends on %s, and it is not responding.", server.name),
+			action:  action,
+			command: command,
+			config:  config,
+		}
+	default:
+		return chatFailure{
+			title:   "The model server rejected the request",
+			summary: fmt.Sprintf("Chat reached %s, but it could not complete the request.", server.name),
+			action:  "Check the configured model and OpenAI-compatible chat endpoint, then try again.",
+			config:  "BEEPER_LLM_MODEL · BEEPER_LLM_BASE_URL",
+		}
+	}
+}
+
+func chatErrorDetail(err error) string {
 	if err == nil {
-		return ""
+		return "unknown error"
 	}
 	detail := strings.TrimSpace(err.Error())
-	if len(detail) > 180 {
-		detail = truncate(detail, 180)
+	lower := strings.ToLower(detail)
+	if strings.Contains(lower, "connection refused") {
+		return "connection refused"
 	}
-	endpoint := "the configured endpoint"
-	if m.llm != nil {
-		endpoint = m.llm.BaseURL()
+	if strings.Contains(lower, "deadline exceeded") || strings.Contains(lower, "timeout") {
+		return "connection timed out"
 	}
-	return fmt.Sprintf("Local assistant unavailable at %s: %s. Start LM Studio's local server and load a chat model, or verify BEEPER_LLM_BASE_URL and BEEPER_LLM_MODEL.", endpoint, detail)
+	if len(detail) > 140 {
+		detail = truncate(detail, 140)
+	}
+	return detail
+}
+
+// chatRuntimeError is concise enough to live inside a transcript turn. The
+// landing state carries the endpoint and diagnostic detail after reconnect.
+func (m Model) chatRuntimeError(err error) string {
+	failure := chatFailureFor(err, m.chatServer())
+	return failure.title + ". " + failure.action + " Press enter to reconnect."
 }
 
 // chatThinkingLabel is the placeholder while the model reasons before any
@@ -197,10 +319,10 @@ func wrapLines(text string, width int) []string {
 
 func (m Model) chatStatusBar() string {
 	if m.chatErr != nil {
-		return "NORMAL  local assistant unavailable · see error above"
+		return "NORMAL  assistant offline"
 	}
 	if m.chatDetecting {
-		return "NORMAL  local assistant · checking endpoint…"
+		return "NORMAL  connecting…"
 	}
 	if m.chatSession != nil {
 		working := "working"
@@ -214,10 +336,7 @@ func (m Model) chatStatusBar() string {
 	if m.mode == ModeChatInsert {
 		return "INSERT"
 	}
-	if m.chatModel != "" {
-		return "NORMAL  local assistant · " + m.chatModel
-	}
-	return "NORMAL  local assistant"
+	return "NORMAL"
 }
 
 func (m Model) chatModeLabel() string {

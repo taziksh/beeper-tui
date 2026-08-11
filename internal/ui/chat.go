@@ -392,9 +392,21 @@ func (m Model) handleChatKey(key string) (Model, tea.Cmd) {
 		if m.chatLinkSel >= 0 && m.chatLinkSel < len(m.chatLinks) {
 			return m.openChatByID(m.chatLinks[m.chatLinkSel].chatID)
 		}
+		if m.chatErr != nil {
+			return m.retryChatEndpoint()
+		}
+		if m.llm == nil || m.chatDetecting || !m.chatChecked {
+			return m, nil
+		}
 		m.mode = ModeChatInsert
 		return m, nil
 	case "i":
+		if m.chatErr != nil {
+			return m.retryChatEndpoint()
+		}
+		if m.llm == nil || m.chatDetecting || !m.chatChecked {
+			return m, nil
+		}
 		m.mode = ModeChatInsert
 		return m, nil
 	case "c":

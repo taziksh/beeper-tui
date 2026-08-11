@@ -14,6 +14,7 @@ func chatModelForTest() Model {
 	m.width = 80
 	m.height = 24
 	m.chatModel = "test-model"
+	m.chatChecked = true
 	return m
 }
 
@@ -116,11 +117,11 @@ func TestApplyChatEventError(t *testing.T) {
 	if m.chatSession != nil {
 		t.Error("session not cleared on error")
 	}
-	if !strings.Contains(turn.errText, "Local assistant unavailable") ||
-		!strings.Contains(turn.errText, "BEEPER_LLM_BASE_URL") {
+	if !strings.Contains(turn.errText, "Can't reach model server") ||
+		!strings.Contains(turn.errText, "Press enter to reconnect") {
 		t.Errorf("error is not actionable: %q", turn.errText)
 	}
-	if m.chatErr == nil || !strings.Contains(m.chatStatusBar(), "unavailable") {
+	if m.chatErr == nil || !strings.Contains(m.chatStatusBar(), "offline") {
 		t.Errorf("provider failure was not kept visible: err=%v status=%q", m.chatErr, m.chatStatusBar())
 	}
 }
@@ -205,43 +206,139 @@ func TestRenderChatNoLLM(t *testing.T) {
 	m.mode = ModeChat
 	m.tab = TabChat
 	out := m.renderChat()
-	if !strings.Contains(out, "Local assistant is not configured") {
+	if !strings.Contains(out, "Assistant isn't configured") {
 		t.Errorf("missing setup help:\n%s", out)
 	}
 }
 
-func TestRenderChatExplainsLocalRuntimeAndConfiguration(t *testing.T) {
+func TestRenderChatReadyStateIsUsefulWithoutCannedPrompts(t *testing.T) {
 	m := chatModelForTest()
 	m.mode = ModeChat
 	m.tab = TabChat
-	m.chatChecked = true
 	out := m.renderChat()
 	for _, want := range []string{
-		"Local assistant (optional)",
-		"default is LM Studio",
-		"Endpoint  http://127.0.0.1:0/v1",
-		"Model     test-model",
-		"Status    ready",
-		"BEEPER_LLM_BASE_URL",
-		"BEEPER_LLM_MODEL",
+		"Ask about your messages",
+		"Search conversations, trace follow-ups",
+		"model server · test-model",
+		"Press enter to ask",
 	} {
 		if !strings.Contains(out, want) {
-			t.Errorf("setup view missing %q:\n%s", want, out)
+			t.Errorf("ready view missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "BEEPER_LLM") || strings.Contains(out, "Status    ") {
+		t.Errorf("ready view exposes setup details before they are needed:\n%s", out)
+	}
+	if strings.Contains(out, "Try") || strings.Contains(out, "?") {
+		t.Errorf("ready view should not contain canned example prompts:\n%s", out)
+	}
+}
+
+func TestRenderChatConnectingNamesDependencyWithoutBlockingRestOfApp(t *testing.T) {
+	m := New(nil, nil).WithLLM(llm.New("http://127.0.0.1:1234/v1", ""))
+	m.width, m.height = 80, 24
+	m.mode = ModeChat
+	m.tab = TabChat
+	m.chatDetecting = true
+	out := m.renderChat()
+	for _, want := range []string{"Connecting to LM Studio", "separate model server", "rest of beeper-tui works without it", "127.0.0.1:1234"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("connecting view missing %q:\n%s", want, out)
 		}
 	}
 }
 
-func TestRenderChatShowsActionableDetectionFailure(t *testing.T) {
-	m := chatModelForTest()
+func TestRenderChatShowsDesignedConnectionFailure(t *testing.T) {
+	m := New(nil, nil).WithLLM(llm.New("http://127.0.0.1:1234/v1", ""))
+	m.width, m.height = 80, 24
 	m.mode = ModeChat
 	m.tab = TabChat
 	m.chatChecked = true
 	m.chatErr = errors.New("dial tcp 127.0.0.1:1234: connect: connection refused")
 	out := m.renderChat()
-	for _, want := range []string{"Status    unavailable", "Local assistant unavailable", "connection refused", "LM Studio", "BEEPER_LLM_BASE_URL", "Press r to recheck"} {
+	for _, want := range []string{"Can't reach LM Studio", "Chat depends on LM Studio", "start Local Server", "Press enter to try again", "Command  lms server start", "Error    connection refused", "Server   LM Studio", "Config   BEEPER_LLM_BASE_URL", "NORMAL  assistant offline"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("failure view missing %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestRenderChatDistinguishesMissingModel(t *testing.T) {
+	m := New(nil, nil).WithLLM(llm.New("http://127.0.0.1:1234/v1", ""))
+	m.width, m.height = 80, 24
+	m.mode, m.tab, m.chatChecked = ModeChat, TabChat, true
+	m.chatErr = errors.New("no chat model loaded")
+	out := m.renderChat()
+	for _, want := range []string{"No chat model is available", "LM Studio is responding", "Load a chat model", "BEEPER_LLM_MODEL"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing-model view missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestChatUnavailableStateWrapsToTerminalWidth(t *testing.T) {
+	m := New(nil, nil).WithLLM(llm.New("http://127.0.0.1:1234/v1", ""))
+	m.width, m.height = 50, 30
+	m.mode, m.tab, m.chatChecked = ModeChat, TabChat, true
+	m.chatErr = errors.New("dial tcp 127.0.0.1:1234: connect: connection refused")
+	for _, line := range m.chatLines() {
+		if len([]rune(line)) > m.width {
+			t.Errorf("line exceeds width %d: %q", m.width, line)
+		}
+	}
+}
+
+func TestChatStatusBarIsTerseWhenReady(t *testing.T) {
+	m := chatModelForTest()
+	if got := m.chatStatusBar(); got != "NORMAL" {
+		t.Errorf("chatStatusBar() = %q, want NORMAL", got)
+	}
+}
+
+func TestChatServerNamesKnownLocalRuntimes(t *testing.T) {
+	for _, tc := range []struct {
+		url, name, address string
+	}{
+		{"http://127.0.0.1:1234/v1", "LM Studio", "127.0.0.1:1234"},
+		{"http://localhost:11434/v1", "Ollama", "localhost:11434"},
+		{"http://127.0.0.1:9999/openai/v1", "model server", "127.0.0.1:9999/openai/v1"},
+	} {
+		m := New(nil, nil).WithLLM(llm.New(tc.url, ""))
+		got := m.chatServer()
+		if got.name != tc.name || got.address != tc.address {
+			t.Errorf("chatServer(%q) = %+v, want %s at %s", tc.url, got, tc.name, tc.address)
+		}
+	}
+}
+
+func TestEnterRetriesWhenChatIsOffline(t *testing.T) {
+	m := chatModelForTest()
+	m.mode = ModeChat
+	m.chatErr = errors.New("connection refused")
+	m, cmd := m.handleChatKey("enter")
+	if cmd == nil || !m.chatDetecting || m.chatChecked || m.mode != ModeChat {
+		t.Errorf("enter retry state = mode %v detecting %t checked %t cmd nil %t", m.mode, m.chatDetecting, m.chatChecked, cmd == nil)
+	}
+}
+
+func TestAskKeyAlsoRetriesWhenChatIsOffline(t *testing.T) {
+	m := chatModelForTest()
+	m.mode = ModeChat
+	m.chatErr = errors.New("connection refused")
+	m, cmd := m.handleChatKey("i")
+	if cmd == nil || !m.chatDetecting || m.chatChecked || m.mode != ModeChat {
+		t.Errorf("ask retry state = mode %v detecting %t checked %t cmd nil %t", m.mode, m.chatDetecting, m.chatChecked, cmd == nil)
+	}
+}
+
+func TestEnterDoesNotOpenInputWhileConnecting(t *testing.T) {
+	m := chatModelForTest()
+	m.mode = ModeChat
+	m.chatChecked = false
+	m.chatDetecting = true
+	m, cmd := m.handleChatKey("enter")
+	if cmd != nil || m.mode != ModeChat {
+		t.Errorf("enter while connecting = mode %v cmd nil %t", m.mode, cmd == nil)
 	}
 }
 
