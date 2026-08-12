@@ -44,34 +44,32 @@ func TestFindChatLinksWordBoundary(t *testing.T) {
 
 func TestChatLinkKeys(t *testing.T) {
 	m := chatModelForTest()
+	m.mode = ModeChat
+	m.tab = TabChat
 	m.chats = linkFixtureChats()
 	m.chatLinks = []chatLink{{name: "Dana Fixture", chatID: "c-dana"}, {name: "Ski Trip", chatID: "c-group"}}
 	m.chatLinkSel = -1
-	startTab := m.tab
 
-	m, _ = m.handleChatKey("tab")
-	m, _ = m.handleChatKey("tab")
+	m, _ = m.handleChatKey("n")
+	m, _ = m.handleChatKey("n")
 	if m.chatLinkSel != 1 {
-		t.Fatalf("sel = %d after two tabs, want 1", m.chatLinkSel)
+		t.Fatalf("sel = %d after two n presses, want 1", m.chatLinkSel)
 	}
-	m, _ = m.handleChatKey("shift+tab")
+	m, _ = m.handleChatKey("N")
 	if m.chatLinkSel != 0 {
-		t.Fatalf("sel = %d after shift+tab, want 0", m.chatLinkSel)
+		t.Fatalf("sel = %d after N, want 0", m.chatLinkSel)
 	}
-	if m.tab != startTab {
-		t.Fatalf("shift+tab switched app tab to %v while links were active", m.tab)
-	}
-	// From no selection, shift+tab should land on the last link.
+	// From no selection, N should land on the last link.
 	m.chatLinkSel = -1
-	m, _ = m.handleChatKey("shift+tab")
+	m, _ = m.handleChatKey("N")
 	if m.chatLinkSel != 1 {
-		t.Fatalf("sel = %d from empty via shift+tab, want last (1)", m.chatLinkSel)
+		t.Fatalf("sel = %d from empty via N, want last (1)", m.chatLinkSel)
 	}
 	m, _ = m.handleChatKey("esc")
 	if m.chatLinkSel != -1 {
 		t.Fatalf("esc did not clear selection")
 	}
-	m, _ = m.handleChatKey("tab")
+	m, _ = m.handleChatKey("n")
 	m, _ = m.handleChatKey("enter")
 	if m.mode != ModeConversation || m.currentChatID != "c-dana" {
 		t.Fatalf("enter on link: mode=%v chat=%s, want conversation c-dana", m.mode, m.currentChatID)
@@ -86,6 +84,42 @@ func TestChatLinkKeys(t *testing.T) {
 	}
 	if m.returnToChat {
 		t.Fatal("returnToChat should clear after back")
+	}
+}
+
+func TestChatTabKeysAlwaysSwitchAppTabs(t *testing.T) {
+	m := chatModelForTest()
+	m.mode = ModeChat
+	m.tab = TabChat
+	m.chatLinks = []chatLink{{name: "Dana Fixture", chatID: "c-dana"}}
+	m.chatLinkSel = 0
+
+	m, _ = m.handleChatKey("tab")
+	if m.tab != TabInbox || m.mode != ModeList {
+		t.Fatalf("tab = %v mode = %v after tab, want Inbox/List", m.tab, m.mode)
+	}
+	if m.chatLinkSel != -1 {
+		t.Fatalf("tab should clear transient link selection, got %d", m.chatLinkSel)
+	}
+
+	m, _ = m.cycleTab(-1)
+	if m.tab != TabChat || m.mode != ModeChat {
+		t.Fatalf("tab = %v mode = %v after returning, want Chat/Chat", m.tab, m.mode)
+	}
+	m, _ = m.handleChatKey("shift+tab")
+	if m.tab != TabArchive || m.mode != ModeList {
+		t.Fatalf("tab = %v mode = %v after shift+tab, want Archive/List", m.tab, m.mode)
+	}
+}
+
+func TestChatLinkKeysDoNothingWithoutLinks(t *testing.T) {
+	m := chatModelForTest()
+	m.mode = ModeChat
+	m.tab = TabChat
+	m, _ = m.handleChatKey("n")
+	m, _ = m.handleChatKey("N")
+	if m.tab != TabChat || m.chatLinkSel != -1 {
+		t.Fatalf("n/N without links changed state: tab=%v sel=%d", m.tab, m.chatLinkSel)
 	}
 }
 

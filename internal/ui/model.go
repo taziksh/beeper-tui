@@ -132,7 +132,7 @@ type Model struct {
 // New builds the initial model. The chat fetch happens in Init, not here.
 // events may be nil, which disables live updates.
 func New(client *api.Client, events *ws.Client) Model {
-	return Model{client: client, events: events, mode: ModeList, loadingChats: true, failedSends: map[string]failedSend{}, chatFollow: true}
+	return Model{client: client, events: events, mode: ModeList, loadingChats: true, failedSends: map[string]failedSend{}, chatFollow: true, chatLinkSel: -1}
 }
 
 // WithLLM attaches the local-model client backing the chat tab. A nil client

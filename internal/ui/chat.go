@@ -371,23 +371,27 @@ func (m Model) handleChatKey(key string) (Model, tea.Cmd) {
 		}
 		return m.cancelChatSession(), nil
 	case "tab":
-		if n := len(m.chatLinks); n > 0 {
-			// First tab from no selection lands on 0 (-1+1)%n.
-			m.chatLinkSel = (m.chatLinkSel + 1) % n
-			return m, nil
-		}
+		m.chatLinkSel = -1
 		return m.cycleTab(1)
 	case "shift+tab":
+		m.chatLinkSel = -1
+		return m.cycleTab(-1)
+	case "n":
 		if n := len(m.chatLinks); n > 0 {
-			// First shift+tab from no selection lands on the last link.
+			// First n from no selection lands on the first link.
+			m.chatLinkSel = (m.chatLinkSel + 1) % n
+		}
+		return m, nil
+	case "N":
+		if n := len(m.chatLinks); n > 0 {
+			// First N from no selection lands on the last link.
 			if m.chatLinkSel < 0 {
 				m.chatLinkSel = n - 1
 			} else {
 				m.chatLinkSel = (m.chatLinkSel + n - 1) % n
 			}
-			return m, nil
 		}
-		return m.cycleTab(-1)
+		return m, nil
 	case "enter":
 		if m.chatLinkSel >= 0 && m.chatLinkSel < len(m.chatLinks) {
 			return m.openChatByID(m.chatLinks[m.chatLinkSel].chatID)

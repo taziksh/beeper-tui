@@ -93,8 +93,9 @@ export BEEPER_API_BASE_URL=http://localhost:23373
 | --- | --- |
 | `i` / `enter` | Ask |
 | `esc` | Stop the response / deselect |
-| `tab` | Cycle names in the answer |
+| `n` / `N` | Select next / previous linked name |
 | `enter` | Open selected name's conversation |
+| `tab` / `shift+tab` | Switch tabs |
 | `c` | Clear transcript |
 
 ## Roadmap
