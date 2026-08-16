@@ -159,7 +159,7 @@ func (m Model) submitChatInput() (Model, tea.Cmd) {
 	ctx, cancel := context.WithCancel(context.Background())
 	session := &chatSession{events: make(chan chatEvent, 64), cancel: cancel}
 	m.chatSession = session
-	go runChatSession(ctx, m.llm, toolEnv{client: m.client, llm: m.llm, people: m.people}, history, session.events)
+	go runChatSession(ctx, m.llm, toolEnv{client: m.client, llm: m.llm, people: m.people, merges: m.merges}, history, session.events)
 	return m, m.waitForChatEvent()
 }
 

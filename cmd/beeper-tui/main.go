@@ -11,6 +11,7 @@ import (
 
 	"github.com/taziksh/beeper-tui/internal/api"
 	"github.com/taziksh/beeper-tui/internal/config"
+	"github.com/taziksh/beeper-tui/internal/identity"
 	"github.com/taziksh/beeper-tui/internal/launch"
 	"github.com/taziksh/beeper-tui/internal/llm"
 	"github.com/taziksh/beeper-tui/internal/person"
@@ -61,9 +62,21 @@ func main() {
 	}
 	cached, _ := state.Load(cachePath)
 
+	// Cross-network merge decisions live in a hand-edited sidecar; new
+	// ambiguous pairs found at startup are written back as pending.
+	mergePath := filepath.Join(cfg.ConfigDir, "identity-merges.yaml")
+	merges, err := identity.LoadMergePolicy(mergePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+
 	// The vault is built before anything can reach the model, so every
 	// outbound prompt carries tokens instead of known identities.
-	llmOpts := []llm.Option{llm.WithRedactor(redact.SessionVault(context.Background(), client))}
+	llmOpts := []llm.Option{llm.WithRedactor(redact.SessionVault(context.Background(), client, merges))}
+	if err := identity.SaveMergePolicy(mergePath, merges); err != nil {
+		fmt.Fprintf(os.Stderr, "identity merges: %v\n", err)
+	}
 	if cfg.LLMProvider == config.ProviderTinfoil {
 		fmt.Fprintln(os.Stderr, "verifying tinfoil enclave…")
 		hc, err := tinfoil.Dial()
@@ -87,9 +100,9 @@ func main() {
 	// anyone asking. Best-effort; dies with the program.
 	sweepCtx, stopSweep := context.WithCancel(context.Background())
 	defer stopSweep()
-	go person.Sweep(sweepCtx, client, assistant, people, 10)
+	go person.Sweep(sweepCtx, client, assistant, people, 10, merges)
 
-	final, err := tea.NewProgram(ui.New(client, events).WithCache(cached, cachePath).WithLLM(assistant).WithPeople(people)).Run()
+	final, err := tea.NewProgram(ui.New(client, events).WithCache(cached, cachePath).WithLLM(assistant).WithPeople(people).WithMerges(merges)).Run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tui: %v\n", err)
 		os.Exit(1)

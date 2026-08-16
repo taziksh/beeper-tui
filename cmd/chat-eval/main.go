@@ -38,7 +38,7 @@ func main() {
 		os.Exit(1)
 	}
 	client := api.New(cfg)
-	llmOpts := []llm.Option{llm.WithRedactor(redact.SessionVault(ctx, client))}
+	llmOpts := []llm.Option{llm.WithRedactor(redact.SessionVault(ctx, client, nil))}
 	if cfg.LLMProvider == config.ProviderTinfoil {
 		fmt.Fprintln(os.Stderr, "verifying tinfoil enclave…")
 		hc, err := tinfoil.Dial()
@@ -69,7 +69,7 @@ func main() {
 
 	fmt.Println("model:", lc.Model())
 	fmt.Println("sweeping person cards…")
-	person.Sweep(ctx, client, lc, people, 5)
+	person.Sweep(ctx, client, lc, people, 5, nil)
 
 	for _, q := range queries {
 		fmt.Println("Q:", q)

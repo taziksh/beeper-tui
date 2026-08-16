@@ -33,7 +33,7 @@ const sweepMessageCap = 80
 // Sweep fills card gaps in the background: the most recently active people
 // whose cards have empty fields get one extraction pass each, sequentially.
 // Errors skip the person; the sweep never surfaces failures.
-func Sweep(ctx context.Context, apiClient MessagesAPI, lc *llm.Client, store *Store, max int) {
+func Sweep(ctx context.Context, apiClient MessagesAPI, lc *llm.Client, store *Store, max int, merges *identity.MergePolicy) {
 	if lc.Model() == "" {
 		if _, err := lc.DetectModel(ctx); err != nil {
 			return
@@ -44,7 +44,7 @@ func Sweep(ctx context.Context, apiClient MessagesAPI, lc *llm.Client, store *St
 		return
 	}
 	var targets []identity.Person
-	for _, p := range identity.Build(chats, nil).All() {
+	for _, p := range identity.BuildWithPolicy(chats, nil, merges).All() {
 		if p.Name == "" || len(p.Chats) == 0 {
 			continue
 		}

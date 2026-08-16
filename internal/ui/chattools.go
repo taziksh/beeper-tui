@@ -122,24 +122,39 @@ type toolEnv struct {
 	client *api.Client
 	llm    *llm.Client
 	people *person.Store
+	merges *identity.MergePolicy
 }
 
 // resolvePerson fuzzy-matches name against the identity index and returns
 // the best match.
-func resolvePerson(ctx context.Context, client *api.Client, name string) (identity.Person, error) {
-	chats, err := client.ListChats(ctx)
+func resolvePerson(ctx context.Context, env toolEnv, name string) (identity.Person, error) {
+	chats, err := env.client.ListChats(ctx)
 	if err != nil {
 		return identity.Person{}, err
 	}
 	// The server search sees every inbox and matches participants, catching
 	// chats the list endpoint omits.
-	if searched, err := client.SearchChats(ctx, name); err == nil {
+	if searched, err := env.client.SearchChats(ctx, name); err == nil {
 		chats = append(chats, searched...)
 	}
-	contacts, _ := client.ListContacts(ctx)
-	people := identity.Build(chats, contacts).Search(name, 1)
+	contacts, _ := env.client.ListContacts(ctx)
+	ix := identity.BuildWithPolicy(chats, contacts, env.merges)
+	people := ix.Search(name, 1)
 	if len(people) == 0 {
-		return identity.Person{}, fmt.Errorf("no person matches %q", name)
+		// Redaction can stitch several people's name parts into one query.
+		// Exact known names inside it become candidates to disambiguate.
+		switch candidates := ix.Candidates(name); len(candidates) {
+		case 0:
+			return identity.Person{}, fmt.Errorf("no person matches %q", name)
+		case 1:
+			return candidates[0], nil
+		default:
+			names := make([]string, len(candidates))
+			for i, c := range candidates {
+				names[i] = c.Name
+			}
+			return identity.Person{}, fmt.Errorf("%q matches several people: %s — ask which one", name, strings.Join(names, ", "))
+		}
 	}
 	return people[0], nil
 }
@@ -157,7 +172,7 @@ func toolPersonCard(ctx context.Context, env toolEnv, args string) (string, tool
 		return "", step, fmt.Errorf("name is required")
 	}
 	name := p.Name
-	if who, err := resolvePerson(ctx, env.client, p.Name); err == nil {
+	if who, err := resolvePerson(ctx, env, p.Name); err == nil {
 		name = who.Name
 	}
 	step.args = truncate(name, 30)
@@ -188,7 +203,7 @@ func toolUpdatePersonCard(ctx context.Context, env toolEnv, args string) (string
 	if strings.TrimSpace(p.Name) == "" {
 		return "", step, fmt.Errorf("name is required")
 	}
-	who, err := resolvePerson(ctx, env.client, p.Name)
+	who, err := resolvePerson(ctx, env, p.Name)
 	if err != nil {
 		return "", step, err
 	}
@@ -508,7 +523,11 @@ func toolSearchContacts(ctx context.Context, env toolEnv, args string) (string, 
 	}
 	contacts, _ := client.ListContacts(ctx)
 	remote, _ := client.SearchContacts(ctx, p.Query)
-	people := identity.Build(chats, append(contacts, remote...)).Search(p.Query, 20)
+	ix := identity.BuildWithPolicy(chats, append(contacts, remote...), env.merges)
+	people := ix.Search(p.Query, 20)
+	if len(people) == 0 {
+		people = ix.Candidates(p.Query)
+	}
 	step.result = fmt.Sprintf("%d found", len(people))
 	if len(people) == 0 {
 		return "no contacts match", step, nil

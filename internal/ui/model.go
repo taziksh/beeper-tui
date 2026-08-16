@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/taziksh/beeper-tui/internal/api"
+	"github.com/taziksh/beeper-tui/internal/identity"
 	"github.com/taziksh/beeper-tui/internal/llm"
 	"github.com/taziksh/beeper-tui/internal/person"
 	"github.com/taziksh/beeper-tui/internal/ws"
@@ -97,6 +98,7 @@ type Model struct {
 	// chat tab (local-LLM assistant) state
 	llm           *llm.Client
 	people        *person.Store
+	merges        *identity.MergePolicy
 	chatModel     string // model id shown in the status bar, "" until detected
 	chatDetecting bool
 	chatChecked   bool // endpoint has been checked at least once this session
@@ -139,6 +141,12 @@ func New(client *api.Client, events *ws.Client) Model {
 // leaves the tab in its setup-help state.
 func (m Model) WithLLM(c *llm.Client) Model {
 	m.llm = c
+	return m
+}
+
+// WithMerges attaches the cross-network identity merge policy.
+func (m Model) WithMerges(p *identity.MergePolicy) Model {
+	m.merges = p
 	return m
 }
 

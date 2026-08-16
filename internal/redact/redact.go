@@ -22,14 +22,14 @@ import (
 )
 
 // SessionVault fetches known chats and contacts and registers every
-// identity for this session. Best-effort: on fetch errors the vault
-// simply covers less.
-func SessionVault(ctx context.Context, client *api.Client) *Vault {
+// identity for this session under the given merge policy. Best-effort: on
+// fetch errors the vault simply covers less.
+func SessionVault(ctx context.Context, client *api.Client, policy *identity.MergePolicy) *Vault {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	chats, _ := client.ListChats(ctx)
 	contacts, _ := client.ListContacts(ctx)
-	return NewVault(identity.Build(chats, contacts).All())
+	return NewVault(identity.BuildWithPolicy(chats, contacts, policy).All())
 }
 
 // Vault holds one session's identity-to-token mapping. Issuance is strict:
