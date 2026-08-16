@@ -60,29 +60,66 @@ func NewVault(people []identity.Person) *Vault {
 		byToken: map[string]string{},
 	}
 	for _, p := range people {
-		token := v.mint(p.Name)
-		for _, name := range append([]string{p.Name}, p.AltNames...) {
-			v.register(name, token)
-			// The possessive keeps its suffix on the token, so "Dana's plan"
-			// reads "CONTACT_N's plan" and grammar survives redaction.
-			v.register(name+"'s", token+"'s")
-			for _, part := range strings.Fields(name) {
-				if len(part) >= 3 {
-					v.register(part, token)
-					v.register(part+"'s", token+"'s")
-				}
-			}
-		}
-		for _, list := range [][]string{p.Usernames, p.Phones, p.Emails} {
-			for _, value := range list {
-				v.register(value, token)
+		v.registerPerson(p)
+	}
+	v.sortReplacer()
+	return v
+}
+
+// Update registers identities discovered after the vault was built, such
+// as new chats or contact renames. Values already registered keep their
+// tokens, so rehydration stays stable within the session.
+func (v *Vault) Update(people []identity.Person) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	for _, p := range people {
+		v.registerPerson(p)
+	}
+	v.sortReplacer()
+}
+
+// registerPerson maps every textual variant of one person to their token,
+// reusing the token any of their known values already carries.
+func (v *Vault) registerPerson(p identity.Person) {
+	token := v.tokenFor(p)
+	for _, name := range append([]string{p.Name}, p.AltNames...) {
+		v.register(name, token)
+		// The possessive keeps its suffix on the token, so "Dana's plan"
+		// reads "CONTACT_N's plan" and grammar survives redaction.
+		v.register(name+"'s", token+"'s")
+		for _, part := range strings.Fields(name) {
+			if len(part) >= 3 {
+				v.register(part, token)
+				v.register(part+"'s", token+"'s")
 			}
 		}
 	}
+	for _, list := range [][]string{p.Usernames, p.Phones, p.Emails} {
+		for _, value := range list {
+			v.register(value, token)
+		}
+	}
+}
+
+// tokenFor finds the token any of the person's values already maps to, or
+// mints a fresh one.
+func (v *Vault) tokenFor(p identity.Person) string {
+	values := append([]string{p.Name}, p.AltNames...)
+	values = append(values, p.Usernames...)
+	values = append(values, p.Phones...)
+	values = append(values, p.Emails...)
+	for _, value := range values {
+		if tok, ok := v.byValue[strings.ToLower(strings.TrimSpace(value))]; ok {
+			return strings.TrimSuffix(tok, "'s")
+		}
+	}
+	return v.mint(p.Name)
+}
+
+func (v *Vault) sortReplacer() {
 	sort.SliceStable(v.replacer, func(i, j int) bool {
 		return len(v.replacer[i].value) > len(v.replacer[j].value)
 	})
-	return v
 }
 
 // mint issues a fresh random token for one person and records the display

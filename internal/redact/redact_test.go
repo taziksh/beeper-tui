@@ -86,3 +86,39 @@ func TestHoldBack(t *testing.T) {
 		t.Errorf("token tail not held: %q + %q", emit, hold)
 	}
 }
+
+func TestUpdateLearnsNewPeopleAndKeepsTokens(t *testing.T) {
+	v := testVault()
+	before := v.Redact("Dana Fixture")
+
+	v.Update([]identity.Person{
+		{Name: "Dana Fixture", Phones: []string{"+15550000777"}},
+		{Name: "New Person"},
+	})
+
+	if got := v.Redact("Dana Fixture"); got != before {
+		t.Errorf("existing token changed: %q -> %q", before, got)
+	}
+	if got := v.Redact("+15550000777"); got != before {
+		t.Errorf("new phone = %q, want Dana's token %q", got, before)
+	}
+	newTok := v.Redact("New Person")
+	if !strings.HasPrefix(newTok, "CONTACT_") || newTok == before {
+		t.Errorf("new person token = %q", newTok)
+	}
+	if got := v.Rehydrate(newTok); got != "New Person" {
+		t.Errorf("Rehydrate(%q) = %q, want New Person", newTok, got)
+	}
+}
+
+func TestUpdateRenameKeepsToken(t *testing.T) {
+	v := testVault()
+	tok := v.Redact("+15550000002")
+
+	// The user saved the contact under a real name; the phone links them.
+	v.Update([]identity.Person{{Name: "Dana Renamed", Phones: []string{"+15550000002"}}})
+
+	if got := v.Redact("Dana Renamed"); got != tok {
+		t.Errorf("renamed person = %q, want same token %q", got, tok)
+	}
+}
