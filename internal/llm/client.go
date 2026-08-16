@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -21,16 +22,51 @@ type Client struct {
 	httpc   *http.Client
 	baseURL string // e.g. http://127.0.0.1:1234/v1
 	model   string
+	apiKey  string
+}
+
+// Option configures a Client.
+type Option func(*Client)
+
+// WithHTTPClient replaces the default transport. Remote providers pass a
+// verified pinned client here.
+func WithHTTPClient(hc *http.Client) Option {
+	return func(c *Client) { c.httpc = hc }
+}
+
+// WithAPIKey sends the key as a bearer token on every request.
+func WithAPIKey(key string) Option {
+	return func(c *Client) { c.apiKey = key }
 }
 
 // New builds a client. model may be empty, in which case DetectModel picks
 // the first loaded non-embedding model.
-func New(baseURL, model string) *Client {
-	return &Client{
+func New(baseURL, model string, opts ...Option) *Client {
+	c := &Client{
 		httpc:   &http.Client{},
 		baseURL: strings.TrimRight(baseURL, "/"),
 		model:   model,
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
+}
+
+// newRequest builds a request with the auth and content headers every
+// endpoint call needs.
+func (c *Client) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
+	if err != nil {
+		return nil, err
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+	return req, nil
 }
 
 // Model returns the model id requests use.
@@ -48,7 +84,7 @@ func (c *Client) SetModel(id string) { c.model = id }
 func (c *Client) DetectModel(ctx context.Context) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/models", nil)
+	req, err := c.newRequest(ctx, http.MethodGet, "/models", nil)
 	if err != nil {
 		return "", err
 	}
@@ -118,6 +154,14 @@ type ToolSpec struct {
 	Parameters  map[string]any `json:"parameters"`
 }
 
+// streamHeaderTimeout bounds dial, TLS, and response headers for Stream.
+// A variable so tests can shorten it.
+var streamHeaderTimeout = 30 * time.Second
+
+// completeTimeout bounds a whole Complete call. Local extraction over many
+// messages is the slow case.
+const completeTimeout = 180 * time.Second
+
 // StreamHandlers receives incremental output during Stream. Either field may
 // be nil. OnDelta gets visible answer fragments; OnReasoning gets hidden
 // thinking fragments from reasoning models.
@@ -173,13 +217,27 @@ func (c *Client) Stream(ctx context.Context, msgs []Message, tools []Tool, h Str
 	if err != nil {
 		return Message{}, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/chat/completions", bytes.NewReader(body))
+	// Bound the wait for response headers without capping how long the
+	// stream itself may run. Cancelling after headers arrive would kill the
+	// body read, so the timer only fires before then.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var timedOut atomic.Bool
+	timer := time.AfterFunc(streamHeaderTimeout, func() {
+		timedOut.Store(true)
+		cancel()
+	})
+	req, err := c.newRequest(ctx, http.MethodPost, "/chat/completions", bytes.NewReader(body))
 	if err != nil {
+		timer.Stop()
 		return Message{}, err
 	}
-	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.httpc.Do(req)
+	timer.Stop()
 	if err != nil {
+		if timedOut.Load() {
+			return Message{}, fmt.Errorf("chat: connect timed out")
+		}
 		return Message{}, err
 	}
 	defer resp.Body.Close()
@@ -271,11 +329,12 @@ func (c *Client) Complete(ctx context.Context, msgs []Message, schemaName string
 	if err != nil {
 		return "", err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/chat/completions", bytes.NewReader(body))
+	ctx, cancel := context.WithTimeout(ctx, completeTimeout)
+	defer cancel()
+	req, err := c.newRequest(ctx, http.MethodPost, "/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.httpc.Do(req)
 	if err != nil {
 		return "", err

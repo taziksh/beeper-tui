@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func sseServer(t *testing.T, lines []string) *httptest.Server {
@@ -138,6 +139,66 @@ func TestDetectModelKeepsConfiguredModelWhileCheckingServer(t *testing.T) {
 	}
 	if id != "configured-model" || c.Model() != "configured-model" {
 		t.Errorf("model = %q, want configured-model", id)
+	}
+}
+
+func TestAuthorizationHeader(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = append(got, r.Header.Get("Authorization"))
+		fmt.Fprint(w, `{"data":[{"id":"m"}]}`)
+	}))
+	defer srv.Close()
+
+	if _, err := New(srv.URL+"/v1", "m", WithAPIKey("sk-test")).DetectModel(context.Background()); err != nil {
+		t.Fatalf("DetectModel: %v", err)
+	}
+	if _, err := New(srv.URL+"/v1", "m").DetectModel(context.Background()); err != nil {
+		t.Fatalf("DetectModel: %v", err)
+	}
+	if want := []string{"Bearer sk-test", ""}; got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("Authorization headers = %q, want %q", got, want)
+	}
+}
+
+func TestWithHTTPClientIsUsed(t *testing.T) {
+	srv := sseServer(t, []string{`{"choices":[{"delta":{"content":"hi"}}]}`})
+	defer srv.Close()
+
+	used := false
+	hc := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		used = true
+		return http.DefaultTransport.RoundTrip(r)
+	})}
+	c := New(srv.URL+"/v1", "m", WithHTTPClient(hc))
+	if _, err := c.Stream(context.Background(), nil, nil, StreamHandlers{}); err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	if !used {
+		t.Error("injected http client was not used")
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestStreamHeaderTimeout(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-release
+	}))
+	defer srv.Close()
+	defer close(release)
+
+	old := streamHeaderTimeout
+	streamHeaderTimeout = 50 * time.Millisecond
+	defer func() { streamHeaderTimeout = old }()
+
+	c := New(srv.URL+"/v1", "m")
+	_, err := c.Stream(context.Background(), nil, nil, StreamHandlers{})
+	if err == nil || !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("Stream error = %v, want timed out", err)
 	}
 }
 
