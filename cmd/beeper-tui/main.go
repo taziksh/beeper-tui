@@ -24,7 +24,16 @@ import (
 
 func main() {
 	unansweredDebug := flag.Bool("unanswered-debug", false, "print per-chat unanswered-filter signals (no names or text) and exit")
+	verifyTinfoil := flag.Bool("verify-tinfoil", false, "attest the Tinfoil enclave, print the verification document, and exit")
 	flag.Parse()
+
+	if *verifyTinfoil {
+		if err := tinfoil.PrintVerification(os.Stdout, os.Stderr); err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	cfg, err := config.Load()
 	if err != nil {

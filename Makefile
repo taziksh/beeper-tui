@@ -1,4 +1,4 @@
-.PHONY: run stub build install install-bin uninstall test vet lint check eval tinfoil-timing
+.PHONY: run stub build install install-bin uninstall test vet lint check eval tinfoil-timing verify-tinfoil
 
 PREFIX  ?= $(HOME)/.local
 BINDIR  ?= $(PREFIX)/bin
@@ -58,3 +58,7 @@ eval:
 
 tinfoil-timing:
 	@scripts/tinfoil-timing.sh
+
+# Attest inference.tinfoil.sh with this binary's SDK, print the document, exit.
+verify-tinfoil:
+	@set -a; [ -f .env ] && . ./.env; set +a; go run ./cmd/beeper-tui --verify-tinfoil

@@ -19,12 +19,20 @@ import (
 // client, so no request can carry data out. The returned client encrypts
 // request bodies to the attested enclave key and refuses other hosts.
 func Dial() (*http.Client, error) {
+	tc, err := dialClient(config.TinfoilEnclave)
+	if err != nil {
+		return nil, err
+	}
+	return tc.HTTPClient(), nil
+}
+
+func dialClient(enclave string) (*tinfoil.Client, error) {
 	// The SDK logs through the global logrus, which would corrupt the
-	// terminal UI.
+	// terminal UI and mix into --verify-tinfoil JSON.
 	logrus.SetOutput(io.Discard)
-	tc, err := tinfoil.NewClientWithOptions(tinfoil.WithEnclave(config.TinfoilEnclave))
+	tc, err := tinfoil.NewClientWithOptions(tinfoil.WithEnclave(enclave))
 	if err != nil {
 		return nil, fmt.Errorf("tinfoil: enclave attestation failed, nothing was sent: %w", err)
 	}
-	return tc.HTTPClient(), nil
+	return tc, nil
 }
