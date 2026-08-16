@@ -34,6 +34,14 @@ else
 	fi
 fi
 
+# Keys and provider settings live in the checkout's .env, gitignored.
+if [[ -f "$REPO/.env" ]]; then
+	set -a
+	# shellcheck disable=SC1091
+	source "$REPO/.env"
+	set +a
+fi
+
 if [[ "$needs_build" -eq 1 ]]; then
 	# Silent by default so the TUI isn't noisy; set BEEPER_TUI_VERBOSE=1 to see rebuilds.
 	if [[ "${BEEPER_TUI_VERBOSE:-}" == "1" ]]; then

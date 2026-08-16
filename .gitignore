@@ -16,3 +16,6 @@
 # Stray clone of the beads tool source (not part of this project)
 /beads/
 /beeper-stub
+
+# Local secrets (TINFOIL_API_KEY etc.), sourced by make run and the launcher
+.env

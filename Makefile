@@ -6,7 +6,7 @@ REPO    := $(CURDIR)
 WRAPPER := scripts/beeper-tui-wrapper.sh
 
 run:
-	go run ./cmd/beeper-tui
+	@set -a; [ -f .env ] && . ./.env; set +a; go run ./cmd/beeper-tui
 
 # Fake API server with synthetic data. Point the TUI at it with
 # BEEPER_API_BASE_URL=http://127.0.0.1:23374 BEEPER_ACCESS_TOKEN=stub
@@ -54,4 +54,4 @@ check: test vet lint
 # End-to-end query eval: real local model against the stub. Start the stub
 # (make stub) and LM Studio first, then read the printed answers.
 eval:
-	BEEPER_API_BASE_URL=http://127.0.0.1:23374 BEEPER_ACCESS_TOKEN=stub go run ./cmd/chat-eval
+	@set -a; [ -f .env ] && . ./.env; set +a; BEEPER_API_BASE_URL=http://127.0.0.1:23374 BEEPER_ACCESS_TOKEN=stub go run ./cmd/chat-eval
