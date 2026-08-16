@@ -301,12 +301,30 @@ func TestChatServerNamesKnownLocalRuntimes(t *testing.T) {
 	}{
 		{"http://127.0.0.1:1234/v1", "LM Studio", "127.0.0.1:1234"},
 		{"http://localhost:11434/v1", "Ollama", "localhost:11434"},
+		{"https://inference.tinfoil.sh/v1", "Tinfoil", "inference.tinfoil.sh"},
 		{"http://127.0.0.1:9999/openai/v1", "model server", "127.0.0.1:9999/openai/v1"},
 	} {
 		m := New(nil, nil).WithLLM(llm.New(tc.url, ""))
 		got := m.chatServer()
 		if got.name != tc.name || got.address != tc.address {
 			t.Errorf("chatServer(%q) = %+v, want %s at %s", tc.url, got, tc.name, tc.address)
+		}
+	}
+}
+
+func TestChatFailureBucketsForRemoteErrors(t *testing.T) {
+	server := chatServerInfo{name: "Tinfoil", address: "inference.tinfoil.sh"}
+	for _, tc := range []struct {
+		err   string
+		title string
+	}{
+		{"tinfoil: enclave attestation failed, nothing was sent: bad measurement", "Enclave attestation failed"},
+		{"chat: HTTP 401: invalid api key", "Tinfoil rejected the API key"},
+		{"chat: HTTP 429: slow down", "Rate limited"},
+	} {
+		got := chatFailureFor(errors.New(tc.err), server)
+		if got.title != tc.title {
+			t.Errorf("chatFailureFor(%q).title = %q, want %q", tc.err, got.title, tc.title)
 		}
 	}
 }

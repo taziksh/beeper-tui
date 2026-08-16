@@ -196,6 +196,10 @@ func (m Model) chatServer() chatServerInfo {
 	if path := strings.TrimRight(u.Path, "/"); path != "" && path != "/v1" {
 		info.address += path
 	}
+	if u.Hostname() == "inference.tinfoil.sh" {
+		info.name = "Tinfoil"
+		return info
+	}
 	switch u.Port() {
 	case "1234":
 		info.name = "LM Studio"
@@ -216,6 +220,31 @@ type chatFailure struct {
 func chatFailureFor(err error, server chatServerInfo) chatFailure {
 	detail := strings.ToLower(chatErrorDetail(err))
 	switch {
+	case strings.Contains(detail, "attestation"),
+		strings.Contains(detail, "verify enclave"),
+		strings.Contains(detail, "certificate"):
+		return chatFailure{
+			title:   "Enclave attestation failed",
+			summary: fmt.Sprintf("Nothing was sent: %s could not be verified.", server.name),
+			action:  "Press enter to verify again.",
+		}
+	case strings.Contains(detail, "http 401"),
+		strings.Contains(detail, "http 403"),
+		strings.Contains(detail, "invalid api key"),
+		strings.Contains(detail, "unauthorized"):
+		return chatFailure{
+			title:   server.name + " rejected the API key",
+			summary: fmt.Sprintf("Chat reached %s, but the key was not accepted.", server.name),
+			action:  "Check TINFOIL_API_KEY, then press enter to retry.",
+			config:  "TINFOIL_API_KEY",
+		}
+	case strings.Contains(detail, "http 429"),
+		strings.Contains(detail, "rate limit"):
+		return chatFailure{
+			title:   "Rate limited",
+			summary: fmt.Sprintf("%s is temporarily refusing more requests.", server.name),
+			action:  "Wait a moment, then press enter to retry.",
+		}
 	case strings.Contains(detail, "no chat model"),
 		strings.Contains(detail, "model not found"),
 		strings.Contains(detail, "unknown model"):
