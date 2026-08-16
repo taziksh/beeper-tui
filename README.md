@@ -99,7 +99,7 @@ Prompts then leave the machine only to an attested enclave the client verifies b
 | --- | --- |
 | `BEEPER_LLM_PROVIDER` | `local` (default) or `tinfoil` |
 | `BEEPER_LLM_BASE_URL` | Local server endpoint (default LM Studio's) |
-| `BEEPER_LLM_MODEL` | Model id. Autodetected locally; `kimi-k3` on Tinfoil |
+| `BEEPER_LLM_MODEL` | Model id. Autodetected locally; `deepseek-v4-flash` on Tinfoil |
 | `TINFOIL_API_KEY` | Required by the tinfoil provider |
 | `BEEPER_TUI_ALLOW_REMOTE` | `1` allows any other remote endpoint |
 

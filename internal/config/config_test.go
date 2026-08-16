@@ -155,7 +155,7 @@ func TestLoad_TinfoilPinsEndpointAndModel(t *testing.T) {
 	if want := "https://inference.tinfoil.sh/v1"; got.LLMBaseURL != want {
 		t.Errorf("LLMBaseURL = %q, want %q", got.LLMBaseURL, want)
 	}
-	if want := "kimi-k3"; got.LLMModel != want {
+	if want := "deepseek-v4-flash"; got.LLMModel != want {
 		t.Errorf("LLMModel = %q, want %q", got.LLMModel, want)
 	}
 	if got.TinfoilAPIKey != "k" {

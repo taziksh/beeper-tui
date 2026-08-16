@@ -53,9 +53,11 @@ const TinfoilEnclave = "inference.tinfoil.sh"
 
 const tinfoilLLMBaseURL = "https://" + TinfoilEnclave + "/v1"
 
-// defaultTinfoilModel is the strongest agentic tool-use model in the
-// Tinfoil catalog as of August 2026.
-const defaultTinfoilModel = "kimi-k3"
+// defaultTinfoilModel favors latency: the chat loop pays one round trip
+// per tool call, and the catalog's reasoning models take 5 to 20 seconds
+// per trivial reply. Measured August 2026: deepseek-v4-flash 0.9s,
+// glm-5-2 5.6s, kimi-k3 22s.
+const defaultTinfoilModel = "deepseek-v4-flash"
 
 // LLMProvider reads BEEPER_LLM_PROVIDER. Empty means local. The Tinfoil
 // API key alone never selects a provider: keys are commonly exported
