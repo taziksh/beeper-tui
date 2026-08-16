@@ -41,9 +41,9 @@ make run
 
 ## Install (system-wide command)
 
-Install a `beeper-tui` launcher onto your PATH (`~/.local/bin` by default). The
-launcher rebuilds from this checkout whenever source is newer than the binary,
-so the command does not go stale after you pull or edit:
+Install a `beeper-tui` stub onto your PATH (`~/.local/bin` by default). It
+forwards to this checkout's wrapper, which rebuilds when source is newer than
+the binary and always loads the current `.env` handling:
 
 ```bash
 make install

@@ -3,7 +3,7 @@
 PREFIX  ?= $(HOME)/.local
 BINDIR  ?= $(PREFIX)/bin
 REPO    := $(CURDIR)
-WRAPPER := scripts/beeper-tui-wrapper.sh
+STUB    := scripts/beeper-tui-stub.sh
 
 # Same artifact as the PATH launcher (`./beeper-tui`). `go run` would compile
 # into the Go cache and leave PATH pointed at a different, older binary.
@@ -18,14 +18,13 @@ stub:
 build:
 	go build -o beeper-tui ./cmd/beeper-tui
 
-# Install a PATH launcher that rebuilds from this checkout when source is newer.
-# Result: `beeper-tui` works from any directory and never goes stale.
+# Install a PATH stub that execs this checkout's wrapper (always latest logic).
 install:
 	@mkdir -p "$(BINDIR)"
-	@sed "s|@REPO@|$(REPO)|g" "$(WRAPPER)" > "$(BINDIR)/beeper-tui"
+	@sed "s|@REPO@|$(REPO)|g" "$(STUB)" > "$(BINDIR)/beeper-tui"
 	@chmod +x "$(BINDIR)/beeper-tui"
 	@echo "Installed launcher → $(BINDIR)/beeper-tui"
-	@echo "  rebuilds from $(REPO) when source is newer than the binary"
+	@echo "  execs $(REPO)/scripts/beeper-tui-wrapper.sh"
 	@# Prime the binary so first launch is fast.
 	@$(MAKE) build
 	@command -v beeper-tui >/dev/null 2>&1 || \

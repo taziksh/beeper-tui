@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Installed by `make install` as ~/.local/bin/beeper-tui.
-# Rebuilds from the checkout when source is newer than the binary, then execs it.
-# So the PATH command never falls behind the repo.
+# Checkout launcher. `make install` puts a stub on PATH that execs this file,
+# so .env loading and rebuild logic stay current without re-installing.
 set -euo pipefail
 
-REPO="${BEEPER_TUI_REPO:-@REPO@}"
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="${BEEPER_TUI_REPO:-$here}"
 BIN="${BEEPER_TUI_BIN:-$REPO/beeper-tui}"
 
 if [[ ! -d "$REPO" ]]; then
