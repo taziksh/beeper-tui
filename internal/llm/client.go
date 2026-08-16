@@ -19,10 +19,11 @@ import (
 
 // Client talks to one OpenAI-compatible server.
 type Client struct {
-	httpc   *http.Client
-	baseURL string // e.g. http://127.0.0.1:1234/v1
-	model   string
-	apiKey  string
+	httpc    *http.Client
+	baseURL  string // e.g. http://127.0.0.1:1234/v1
+	model    string
+	apiKey   string
+	redactor Redactor
 }
 
 // Option configures a Client.
@@ -37,6 +38,21 @@ func WithHTTPClient(hc *http.Client) Option {
 // WithAPIKey sends the key as a bearer token on every request.
 func WithAPIKey(key string) Option {
 	return func(c *Client) { c.apiKey = key }
+}
+
+// Redactor rewrites outbound text to opaque session tokens and inbound
+// text back to display form. HoldBack splits streamed text into a
+// safe-to-emit head and a tail that could begin a token.
+type Redactor interface {
+	Redact(string) string
+	Rehydrate(string) string
+	HoldBack(text string) (emit, hold string)
+}
+
+// WithRedactor tokenizes every outbound message and rehydrates model
+// output, so registered identity strings never reach the endpoint.
+func WithRedactor(r Redactor) Option {
+	return func(c *Client) { c.redactor = r }
 }
 
 // New builds a client. model may be empty, in which case DetectModel picks
@@ -209,7 +225,7 @@ type chunk struct {
 func (c *Client) Stream(ctx context.Context, msgs []Message, tools []Tool, h StreamHandlers) (Message, error) {
 	body, err := json.Marshal(chatRequest{
 		Model:       c.model,
-		Messages:    msgs,
+		Messages:    c.redactMessages(msgs),
 		Tools:       tools,
 		Stream:      true,
 		Temperature: 0.1,
@@ -247,6 +263,23 @@ func (c *Client) Stream(ctx context.Context, msgs []Message, tools []Tool, h Str
 	}
 
 	out := Message{Role: "assistant"}
+	// Deltas can split a token across chunks, so a redactor holds back any
+	// tail that could still grow into one.
+	var hold string
+	emitDelta := func(s string) {
+		if h.OnDelta == nil {
+			return
+		}
+		if c.redactor == nil {
+			h.OnDelta(s)
+			return
+		}
+		var emit string
+		emit, hold = c.redactor.HoldBack(hold + s)
+		if emit != "" {
+			h.OnDelta(c.redactor.Rehydrate(emit))
+		}
+	}
 	calls := map[int]*ToolCall{}
 	maxIdx := -1
 	sc := bufio.NewScanner(resp.Body)
@@ -273,9 +306,7 @@ func (c *Client) Stream(ctx context.Context, msgs []Message, tools []Tool, h Str
 		d := ck.Choices[0].Delta
 		if d.Content != "" {
 			out.Content += d.Content
-			if h.OnDelta != nil {
-				h.OnDelta(d.Content)
-			}
+			emitDelta(d.Content)
 		}
 		if r := d.Reasoning + d.ReasoningContent; r != "" && h.OnReasoning != nil {
 			h.OnReasoning(r)
@@ -306,7 +337,38 @@ func (c *Client) Stream(ctx context.Context, msgs []Message, tools []Tool, h Str
 			out.ToolCalls = append(out.ToolCalls, *tc)
 		}
 	}
+	if c.redactor != nil {
+		if hold != "" && h.OnDelta != nil {
+			h.OnDelta(c.redactor.Rehydrate(hold))
+		}
+		out.Content = c.redactor.Rehydrate(out.Content)
+		for i := range out.ToolCalls {
+			out.ToolCalls[i].Function.Arguments = c.redactor.Rehydrate(out.ToolCalls[i].Function.Arguments)
+		}
+	}
 	return out, nil
+}
+
+// redactMessages copies msgs with content and tool-call arguments
+// tokenized. The caller's slice keeps its display form.
+func (c *Client) redactMessages(msgs []Message) []Message {
+	if c.redactor == nil {
+		return msgs
+	}
+	out := make([]Message, len(msgs))
+	for i, m := range msgs {
+		m.Content = c.redactor.Redact(m.Content)
+		if len(m.ToolCalls) > 0 {
+			calls := make([]ToolCall, len(m.ToolCalls))
+			for j, tc := range m.ToolCalls {
+				tc.Function.Arguments = c.redactor.Redact(tc.Function.Arguments)
+				calls[j] = tc
+			}
+			m.ToolCalls = calls
+		}
+		out[i] = m
+	}
+	return out
 }
 
 // Complete sends the conversation without streaming and constrains the reply
@@ -315,7 +377,7 @@ func (c *Client) Stream(ctx context.Context, msgs []Message, tools []Tool, h Str
 func (c *Client) Complete(ctx context.Context, msgs []Message, schemaName string, schema map[string]any) (string, error) {
 	body, err := json.Marshal(chatRequest{
 		Model:       c.model,
-		Messages:    msgs,
+		Messages:    c.redactMessages(msgs),
 		Temperature: 0,
 		ResponseFormat: map[string]any{
 			"type": "json_schema",
@@ -366,6 +428,9 @@ func (c *Client) Complete(ctx context.Context, msgs []Message, schemaName string
 	msg := out.Choices[0].Message
 	for _, raw := range []string{msg.Content, msg.ReasoningContent} {
 		if j := extractJSONObject(raw); j != "" {
+			if c.redactor != nil {
+				j = c.redactor.Rehydrate(j)
+			}
 			return j, nil
 		}
 	}

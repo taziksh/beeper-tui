@@ -150,6 +150,11 @@ func (v *Vault) Rehydrate(text string) string {
 	})
 }
 
+// HoldBack lets a vault satisfy interfaces that need the package function.
+func (v *Vault) HoldBack(text string) (emit, hold string) {
+	return HoldBack(text)
+}
+
 // HoldBack splits streamed text into a safe-to-emit head and a tail that
 // must wait for the next chunk because it could be the start of a token.
 func HoldBack(text string) (emit, hold string) {
