@@ -73,7 +73,8 @@ func main() {
 
 	// The vault is built before anything can reach the model, so every
 	// outbound prompt carries tokens instead of known identities.
-	llmOpts := []llm.Option{llm.WithRedactor(redact.SessionVault(context.Background(), client, merges))}
+	vault := redact.SessionVault(context.Background(), client, merges)
+	llmOpts := []llm.Option{llm.WithRedactor(vault)}
 	if err := identity.SaveMergePolicy(mergePath, merges); err != nil {
 		fmt.Fprintf(os.Stderr, "identity merges: %v\n", err)
 	}
@@ -102,7 +103,7 @@ func main() {
 	defer stopSweep()
 	go person.Sweep(sweepCtx, client, assistant, people, 10, merges)
 
-	final, err := tea.NewProgram(ui.New(client, events).WithCache(cached, cachePath).WithLLM(assistant).WithPeople(people).WithMerges(merges)).Run()
+	final, err := tea.NewProgram(ui.New(client, events).WithCache(cached, cachePath).WithLLM(assistant).WithPeople(people).WithMerges(merges).WithVault(vault)).Run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tui: %v\n", err)
 		os.Exit(1)

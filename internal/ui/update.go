@@ -5,10 +5,12 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/taziksh/beeper-tui/internal/api"
 )
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.loadChatsCmd(), m.loadSelfUsersCmd(), m.waitForWSEvent(), pollTick())
+	return tea.Batch(m.loadChatsCmd(), m.loadContactsCmd(), m.loadSelfUsersCmd(), m.waitForWSEvent(), pollTick())
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -24,7 +26,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.selected < len(m.chats) {
 			selectedID = m.chats[m.selected].ID
 		}
-		chats := msg.chats
+		chats := resolveChatTitles(msg.chats, m.contacts)
 		sortChats(chats)
 		m.chats = chats
 		if selectedID != "" {
@@ -39,8 +41,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case wsEventMsg:
 		m, cmd := m.applyWSEvent(msg.event)
 		return m, tea.Batch(cmd, m.loadPreviewsCmd(), m.waitForWSEvent())
+	case contactsLoadedMsg:
+		return m.applyContactsLoaded(msg.contacts), nil
 	case chatRefreshedMsg:
-		m = m.applyChatRefreshed(msg.chat)
+		m = m.applyChatRefreshed(resolveChatTitles([]api.Chat{msg.chat}, m.contacts)[0])
 		return m.maybeSaveCache()
 	case pollTickMsg:
 		return m.applyPollTick()

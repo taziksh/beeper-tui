@@ -7,6 +7,7 @@ import (
 	"github.com/taziksh/beeper-tui/internal/identity"
 	"github.com/taziksh/beeper-tui/internal/llm"
 	"github.com/taziksh/beeper-tui/internal/person"
+	"github.com/taziksh/beeper-tui/internal/redact"
 	"github.com/taziksh/beeper-tui/internal/ws"
 )
 
@@ -99,6 +100,8 @@ type Model struct {
 	llm           *llm.Client
 	people        *person.Store
 	merges        *identity.MergePolicy
+	vault         *redact.Vault
+	contacts      []api.Contact
 	chatModel     string // model id shown in the status bar, "" until detected
 	chatDetecting bool
 	chatChecked   bool // endpoint has been checked at least once this session
@@ -141,6 +144,13 @@ func New(client *api.Client, events *ws.Client) Model {
 // leaves the tab in its setup-help state.
 func (m Model) WithLLM(c *llm.Client) Model {
 	m.llm = c
+	return m
+}
+
+// WithVault attaches the session redaction vault so contact refreshes can
+// register identities discovered after startup.
+func (m Model) WithVault(v *redact.Vault) Model {
+	m.vault = v
 	return m
 }
 

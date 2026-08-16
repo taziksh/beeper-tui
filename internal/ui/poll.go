@@ -31,7 +31,7 @@ func pollTick() tea.Cmd {
 
 // applyPollTick fires the background refreshes and schedules the next tick.
 func (m Model) applyPollTick() (Model, tea.Cmd) {
-	cmds := []tea.Cmd{pollTick(), m.refreshChatsCmd()}
+	cmds := []tea.Cmd{pollTick(), m.refreshChatsCmd(), m.loadContactsCmd()}
 	if m.currentChatID != "" && (m.mode == ModeConversation || m.mode == ModeInsert) {
 		cmds = append(cmds, m.refreshMessagesCmd(m.currentChatID))
 	}
