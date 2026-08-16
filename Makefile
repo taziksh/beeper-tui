@@ -1,4 +1,4 @@
-.PHONY: run stub build install install-bin uninstall test vet lint check eval
+.PHONY: run stub build install install-bin uninstall test vet lint check eval tinfoil-timing
 
 PREFIX  ?= $(HOME)/.local
 BINDIR  ?= $(PREFIX)/bin
@@ -55,3 +55,6 @@ check: test vet lint
 # (make stub) and LM Studio first, then read the printed answers.
 eval:
 	@set -a; [ -f .env ] && . ./.env; set +a; BEEPER_API_BASE_URL=http://127.0.0.1:23374 BEEPER_ACCESS_TOKEN=stub go run ./cmd/chat-eval
+
+tinfoil-timing:
+	@scripts/tinfoil-timing.sh
