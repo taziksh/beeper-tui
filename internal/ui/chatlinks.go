@@ -41,6 +41,11 @@ func findChatLinks(text string, chats []api.Chat) []chatLink {
 			return
 		}
 		pos := wordIndex(low, strings.ToLower(name))
+		if pos < 0 && identity.IsHandleLike(name) {
+			// The model reformats phone numbers freely, so match the
+			// digits instead and link the span as it appears.
+			pos, name = digitAlias(low, name)
+		}
 		if pos < 0 {
 			return
 		}
@@ -75,6 +80,26 @@ func newestChat(refs []identity.ChatRef, lastActive map[string]time.Time) string
 		}
 	}
 	return best
+}
+
+// phoneSpan matches a phone-shaped run of digits and separators.
+var phoneSpan = regexp.MustCompile(`\+?[0-9][0-9 ().-]{4,}[0-9]`)
+
+// digitAlias finds a span of text carrying the same phone digits as name,
+// in whatever format the model chose, and returns its position and exact
+// text. Position -1 means no span matches.
+func digitAlias(text, name string) (int, string) {
+	want := identity.DigitsOnly(name)
+	if len(want) < 7 {
+		return -1, name
+	}
+	for _, loc := range phoneSpan.FindAllStringIndex(text, -1) {
+		span := text[loc[0]:loc[1]]
+		if sameNumber(identity.DigitsOnly(span), want) {
+			return loc[0], span
+		}
+	}
+	return -1, name
 }
 
 // wordIndex finds needle in haystack at a word boundary, or -1.
@@ -117,7 +142,17 @@ func (m Model) highlightChatLinks(lines []string) []string {
 		if li == m.chatLinkSel {
 			style = linkSelStyle
 		}
-		re, err := regexp.Compile(`(?i)\b` + regexp.QuoteMeta(link.name) + `\b`)
+		// Word boundaries only exist next to word characters, so names
+		// that start or end with symbols, like +1 numbers, skip them.
+		pat := `(?i)`
+		if isWordByte(link.name[0]) {
+			pat += `\b`
+		}
+		pat += regexp.QuoteMeta(link.name)
+		if isWordByte(link.name[len(link.name)-1]) {
+			pat += `\b`
+		}
+		re, err := regexp.Compile(pat)
 		if err != nil {
 			continue
 		}

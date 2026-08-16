@@ -29,3 +29,21 @@ func TestResolveChatTitles(t *testing.T) {
 		t.Error("input slice mutated")
 	}
 }
+
+func TestFindChatLinksMatchesReformattedNumbers(t *testing.T) {
+	chats := []api.Chat{
+		{ID: "c1", Type: "single", Title: "+14087507615"},
+		{ID: "c2", Type: "single", Title: "39781"},
+	}
+	text := "You owe replies to **+1 408-750-7615** and **39781**."
+	links := findChatLinks(text, chats)
+	if len(links) != 2 {
+		t.Fatalf("links = %+v, want both chats linked", links)
+	}
+	if links[0].chatID != "c1" || links[0].name != "+1 408-750-7615" {
+		t.Errorf("link 0 = %+v, want c1 via the reformatted span", links[0])
+	}
+	if links[1].chatID != "c2" {
+		t.Errorf("link 1 = %+v, want c2", links[1])
+	}
+}
