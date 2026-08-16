@@ -16,6 +16,7 @@ import (
 	"github.com/taziksh/beeper-tui/internal/person"
 	"github.com/taziksh/beeper-tui/internal/redact"
 	"github.com/taziksh/beeper-tui/internal/state"
+	"github.com/taziksh/beeper-tui/internal/tinfoil"
 	"github.com/taziksh/beeper-tui/internal/ui"
 	"github.com/taziksh/beeper-tui/internal/ws"
 )
@@ -62,8 +63,17 @@ func main() {
 
 	// The vault is built before anything can reach the model, so every
 	// outbound prompt carries tokens instead of known identities.
-	vault := redact.SessionVault(context.Background(), client)
-	assistant := llm.New(cfg.LLMBaseURL, cfg.LLMModel, llm.WithRedactor(vault))
+	llmOpts := []llm.Option{llm.WithRedactor(redact.SessionVault(context.Background(), client))}
+	if cfg.LLMProvider == config.ProviderTinfoil {
+		fmt.Fprintln(os.Stderr, "verifying tinfoil enclave…")
+		hc, err := tinfoil.Dial()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			os.Exit(1)
+		}
+		llmOpts = append(llmOpts, llm.WithHTTPClient(hc), llm.WithAPIKey(cfg.TinfoilAPIKey))
+	}
+	assistant := llm.New(cfg.LLMBaseURL, cfg.LLMModel, llmOpts...)
 
 	// Person cards live with config, not cache: they are user data, edited by
 	// hand as much as by extraction.

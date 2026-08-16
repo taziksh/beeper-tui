@@ -14,6 +14,7 @@ import (
 	"github.com/taziksh/beeper-tui/internal/llm"
 	"github.com/taziksh/beeper-tui/internal/person"
 	"github.com/taziksh/beeper-tui/internal/redact"
+	"github.com/taziksh/beeper-tui/internal/tinfoil"
 	"github.com/taziksh/beeper-tui/internal/ui"
 )
 
@@ -37,7 +38,17 @@ func main() {
 		os.Exit(1)
 	}
 	client := api.New(cfg)
-	lc := llm.New(cfg.LLMBaseURL, cfg.LLMModel, llm.WithRedactor(redact.SessionVault(ctx, client)))
+	llmOpts := []llm.Option{llm.WithRedactor(redact.SessionVault(ctx, client))}
+	if cfg.LLMProvider == config.ProviderTinfoil {
+		fmt.Fprintln(os.Stderr, "verifying tinfoil enclave…")
+		hc, err := tinfoil.Dial()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			os.Exit(1)
+		}
+		llmOpts = append(llmOpts, llm.WithHTTPClient(hc), llm.WithAPIKey(cfg.TinfoilAPIKey))
+	}
+	lc := llm.New(cfg.LLMBaseURL, cfg.LLMModel, llmOpts...)
 	if lc.Model() == "" {
 		if _, err := lc.DetectModel(ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "llm: %v (is the model server at %s running?)\n", err, cfg.LLMBaseURL)
