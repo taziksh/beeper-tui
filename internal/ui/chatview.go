@@ -111,9 +111,9 @@ func (m Model) chatTurnLines(t chatTurn, width int) []string {
 	return lines
 }
 
-// chatLandingLines uses progressive disclosure: the healthy empty state is
-// about what Chat can do; runtime setup details appear only while connecting
-// or when the optional model server needs attention.
+// chatLandingLines uses progressive disclosure: the healthy empty state
+// names the model and nothing else. Connecting and failure states keep
+// just enough to identify the endpoint or act on an error.
 func (m Model) chatLandingLines() []string {
 	if m.chatDetecting || !m.chatChecked {
 		return m.chatConnectingLines()
@@ -130,19 +130,17 @@ func (m Model) chatReadyLines() []string {
 	if model == "" {
 		model = "auto-detected model"
 	}
-	lines := []string{"", "  Ask about your messages", ""}
-	lines = append(lines, m.chatBodyLines("Search conversations, trace follow-ups, or ask about something you remember.")...)
-	lines = append(lines, "")
-	lines = append(lines, m.chatBodyLines(fmt.Sprintf("● %s · %s", server.name, model))...)
-	return append(lines, "", "  › Press enter to ask")
+	return []string{"", fmt.Sprintf("  ● %s · %s", server.name, model)}
 }
 
 func (m Model) chatConnectingLines() []string {
 	server := m.chatServer()
-	lines := []string{"", fmt.Sprintf("  Connecting to %s…", server.name), ""}
-	lines = append(lines, m.chatBodyLines("Chat uses a separate model server. The rest of beeper-tui works without it.")...)
-	lines = append(lines, "")
-	return append(lines, m.chatBodyLines(server.address)...)
+	return []string{
+		"",
+		fmt.Sprintf("  Connecting to %s…", server.name),
+		"",
+		"  " + server.address,
+	}
 }
 
 func (m Model) chatUnavailableLines(err error) []string {

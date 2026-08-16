@@ -211,39 +211,44 @@ func TestRenderChatNoLLM(t *testing.T) {
 	}
 }
 
-func TestRenderChatReadyStateIsUsefulWithoutCannedPrompts(t *testing.T) {
+func TestRenderChatReadyStateShowsModelWithoutPitch(t *testing.T) {
 	m := chatModelForTest()
 	m.mode = ModeChat
 	m.tab = TabChat
 	out := m.renderChat()
-	for _, want := range []string{
+	if !strings.Contains(out, "model server · test-model") {
+		t.Errorf("ready view missing model identity:\n%s", out)
+	}
+	for _, leftover := range []string{
 		"Ask about your messages",
-		"Search conversations, trace follow-ups",
-		"model server · test-model",
+		"Search conversations",
 		"Press enter to ask",
+		"BEEPER_LLM",
+		"Status    ",
+		"Try",
+		"?",
 	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("ready view missing %q:\n%s", want, out)
+		if strings.Contains(out, leftover) {
+			t.Errorf("ready view still contains %q:\n%s", leftover, out)
 		}
-	}
-	if strings.Contains(out, "BEEPER_LLM") || strings.Contains(out, "Status    ") {
-		t.Errorf("ready view exposes setup details before they are needed:\n%s", out)
-	}
-	if strings.Contains(out, "Try") || strings.Contains(out, "?") {
-		t.Errorf("ready view should not contain canned example prompts:\n%s", out)
 	}
 }
 
-func TestRenderChatConnectingNamesDependencyWithoutBlockingRestOfApp(t *testing.T) {
+func TestRenderChatConnectingIsQuiet(t *testing.T) {
 	m := New(nil, nil).WithLLM(llm.New("http://127.0.0.1:1234/v1", ""))
 	m.width, m.height = 80, 24
 	m.mode = ModeChat
 	m.tab = TabChat
 	m.chatDetecting = true
 	out := m.renderChat()
-	for _, want := range []string{"Connecting to LM Studio", "separate model server", "rest of beeper-tui works without it", "127.0.0.1:1234"} {
+	for _, want := range []string{"Connecting to LM Studio", "127.0.0.1:1234"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("connecting view missing %q:\n%s", want, out)
+		}
+	}
+	for _, leftover := range []string{"separate model server", "rest of beeper-tui works without it"} {
+		if strings.Contains(out, leftover) {
+			t.Errorf("connecting view still contains %q:\n%s", leftover, out)
 		}
 	}
 }
