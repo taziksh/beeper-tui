@@ -7,6 +7,7 @@
 package redact
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
 	"math/big"
@@ -14,9 +15,22 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/taziksh/beeper-tui/internal/api"
 	"github.com/taziksh/beeper-tui/internal/identity"
 )
+
+// SessionVault fetches known chats and contacts and registers every
+// identity for this session. Best-effort: on fetch errors the vault
+// simply covers less.
+func SessionVault(ctx context.Context, client *api.Client) *Vault {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	chats, _ := client.ListChats(ctx)
+	contacts, _ := client.ListContacts(ctx)
+	return NewVault(identity.Build(chats, contacts).All())
+}
 
 // Vault holds one session's identity-to-token mapping. Issuance is strict:
 // only strings registered from the identity index get tokens, and only

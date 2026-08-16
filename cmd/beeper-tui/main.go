@@ -14,6 +14,7 @@ import (
 	"github.com/taziksh/beeper-tui/internal/launch"
 	"github.com/taziksh/beeper-tui/internal/llm"
 	"github.com/taziksh/beeper-tui/internal/person"
+	"github.com/taziksh/beeper-tui/internal/redact"
 	"github.com/taziksh/beeper-tui/internal/state"
 	"github.com/taziksh/beeper-tui/internal/ui"
 	"github.com/taziksh/beeper-tui/internal/ws"
@@ -59,7 +60,10 @@ func main() {
 	}
 	cached, _ := state.Load(cachePath)
 
-	assistant := llm.New(cfg.LLMBaseURL, cfg.LLMModel)
+	// The vault is built before anything can reach the model, so every
+	// outbound prompt carries tokens instead of known identities.
+	vault := redact.SessionVault(context.Background(), client)
+	assistant := llm.New(cfg.LLMBaseURL, cfg.LLMModel, llm.WithRedactor(vault))
 
 	// Person cards live with config, not cache: they are user data, edited by
 	// hand as much as by extraction.

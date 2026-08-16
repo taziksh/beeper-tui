@@ -13,6 +13,7 @@ import (
 	"github.com/taziksh/beeper-tui/internal/config"
 	"github.com/taziksh/beeper-tui/internal/llm"
 	"github.com/taziksh/beeper-tui/internal/person"
+	"github.com/taziksh/beeper-tui/internal/redact"
 	"github.com/taziksh/beeper-tui/internal/ui"
 )
 
@@ -36,10 +37,10 @@ func main() {
 		os.Exit(1)
 	}
 	client := api.New(cfg)
-	lc := llm.New(cfg.LLMBaseURL, cfg.LLMModel)
+	lc := llm.New(cfg.LLMBaseURL, cfg.LLMModel, llm.WithRedactor(redact.SessionVault(ctx, client)))
 	if lc.Model() == "" {
 		if _, err := lc.DetectModel(ctx); err != nil {
-			fmt.Fprintf(os.Stderr, "llm: %v (is LM Studio running?)\n", err)
+			fmt.Fprintf(os.Stderr, "llm: %v (is the model server at %s running?)\n", err, cfg.LLMBaseURL)
 			os.Exit(1)
 		}
 	}
