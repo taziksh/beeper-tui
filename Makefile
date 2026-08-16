@@ -49,7 +49,11 @@ vet:
 lint:
 	golangci-lint run ./...
 
-check: test vet lint
+# Skipped when shellcheck is not installed.
+shellcheck:
+	@if command -v shellcheck >/dev/null; then shellcheck scripts/*.sh; else echo "shellcheck not installed, skipping"; fi
+
+check: test vet lint shellcheck
 
 # End-to-end query eval: real local model against the stub. Start the stub
 # (make stub) and LM Studio first, then read the printed answers.
