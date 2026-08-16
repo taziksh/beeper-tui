@@ -204,3 +204,42 @@ func TestCandidatesSplitStitchedQuery(t *testing.T) {
 		t.Fatalf("candidates = %+v, want both people", got)
 	}
 }
+
+func TestIsHandleLike(t *testing.T) {
+	for s, want := range map[string]bool{
+		"+1 (408) 750-7615": true,
+		"+14087507615":      true,
+		"39781":             true,
+		"dana@example.test": true,
+		"Dana Kim":          false,
+		"Dana":              false,
+		"O'Brien":           false,
+	} {
+		if got := IsHandleLike(s); got != want {
+			t.Errorf("IsHandleLike(%q) = %v, want %v", s, got, want)
+		}
+	}
+}
+
+func TestNumberTitledChatTakesContactName(t *testing.T) {
+	chats := []api.Chat{
+		{ID: "c-num", AccountID: "im", Network: "iMessage", Title: "+1 (408) 750-7615", Type: "single", LastActive: base},
+	}
+	contacts := []api.Contact{
+		{AccountID: "im2", UserID: "u-priya", FullName: "Priya Blooming", PhoneNumber: "+14087507615"},
+	}
+	got := Build(chats, contacts).All()
+	if len(got) != 1 {
+		t.Fatalf("people = %d (%+v), want 1 merged by phone", len(got), got)
+	}
+	p := got[0]
+	if p.Name != "Priya Blooming" {
+		t.Errorf("Name = %q, want the contact's real name", p.Name)
+	}
+	if !containsNormalized(p.AltNames, "+1 (408) 750-7615") {
+		t.Errorf("AltNames = %v, want the number kept as alias", p.AltNames)
+	}
+	if len(p.Chats) != 1 {
+		t.Errorf("chats = %+v, want the number-titled chat attached", p.Chats)
+	}
+}

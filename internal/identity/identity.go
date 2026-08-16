@@ -91,7 +91,13 @@ func BuildWithPolicy(chats []api.Chat, contacts []api.Contact, policy *MergePoli
 			b.add(AccountRef{c.AccountID, p.UserID, c.Network}, p.FullName, p.Username, "", "", ref, c.LastActive)
 		}
 		if c.Type == "single" && c.Title != "" {
-			b.add(AccountRef{c.AccountID, "", c.Network}, c.Title, "", "", "", ref, c.LastActive)
+			// A number-like title is also the person's phone, so the chat
+			// can merge with the contact that carries their real name.
+			phone := ""
+			if IsHandleLike(c.Title) && len(DigitsOnly(c.Title)) >= 7 {
+				phone = c.Title
+			}
+			b.add(AccountRef{c.AccountID, "", c.Network}, c.Title, "", phone, "", ref, c.LastActive)
 		}
 	}
 	for _, ct := range contacts {
@@ -137,7 +143,7 @@ func (b *builder) add(acct AccountRef, name, username, phone, email string, ref 
 		acctNameKey = acct.AccountID + "\x00" + n
 		nameKey = n
 	}
-	phoneKey := digitsOnly(phone)
+	phoneKey := DigitsOnly(phone)
 	emailKey := strings.ToLower(strings.TrimSpace(email))
 
 	var dst *Person
@@ -222,7 +228,15 @@ func (b *builder) absorbFields(dst *Person, name, username, phone, email string,
 	switch {
 	case dst.Name == "":
 		dst.Name = name
-	case name != "" && Normalize(name) != Normalize(dst.Name) && !containsNormalized(dst.AltNames, name):
+	case name == "" || Normalize(name) == Normalize(dst.Name):
+	case IsHandleLike(dst.Name) && !IsHandleLike(name):
+		// A real name beats a bare number or address as the display name.
+		old := dst.Name
+		dst.Name = name
+		if !containsNormalized(dst.AltNames, old) {
+			dst.AltNames = append(dst.AltNames, old)
+		}
+	case !containsNormalized(dst.AltNames, name):
 		dst.AltNames = append(dst.AltNames, name)
 	}
 	if username != "" {
@@ -307,8 +321,8 @@ func containsPerson(list []*Person, p *Person) bool {
 	return false
 }
 
-// digitsOnly reduces a phone number to its digits for matching.
-func digitsOnly(s string) string {
+// DigitsOnly reduces a phone number to its digits for matching.
+func DigitsOnly(s string) string {
 	var b strings.Builder
 	for _, r := range s {
 		if r >= '0' && r <= '9' {
@@ -316,6 +330,29 @@ func digitsOnly(s string) string {
 		}
 	}
 	return b.String()
+}
+
+// IsHandleLike reports whether s reads as a bare address rather than a
+// name: a phone number, short code, or email.
+func IsHandleLike(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	if strings.Contains(s, "@") && !strings.Contains(s, " ") {
+		return true
+	}
+	digits := 0
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9':
+			digits++
+		case r == '+' || r == ' ' || r == '-' || r == '(' || r == ')' || r == '.':
+		default:
+			return false
+		}
+	}
+	return digits >= 3
 }
 
 func hasChat(refs []ChatRef, id string) bool {
