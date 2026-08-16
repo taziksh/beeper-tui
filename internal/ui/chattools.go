@@ -514,7 +514,7 @@ func toolSearchContacts(ctx context.Context, env toolEnv, args string) (string, 
 		return "no contacts match", step, nil
 	}
 	var b strings.Builder
-	b.WriteString("name | handle | network | phone | email | chats | user_id\n")
+	b.WriteString("name | handle | networks | phone | email | chats\n")
 	for _, person := range people {
 		titles := make([]string, 0, 2)
 		for _, ref := range person.Chats {
@@ -523,9 +523,13 @@ func toolSearchContacts(ctx context.Context, env toolEnv, args string) (string, 
 			}
 			titles = append(titles, ref.Title)
 		}
-		fmt.Fprintf(&b, "%s | %s | %s | %s | %s | %s | %s\n",
-			person.Name, person.Username, person.Network, person.Phone, person.Email,
-			strings.Join(titles, "; "), person.UserID)
+		fmt.Fprintf(&b, "%s | %s | %s | %s | %s | %s\n",
+			person.Name,
+			strings.Join(person.Usernames, ", "),
+			strings.Join(person.Networks(), ", "),
+			strings.Join(person.Phones, ", "),
+			strings.Join(person.Emails, ", "),
+			strings.Join(titles, "; "))
 	}
 	appendCardFacts(&b, env, people)
 	return b.String(), step, nil

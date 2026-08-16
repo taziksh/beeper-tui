@@ -93,7 +93,7 @@ func TestMergeAcrossSources(t *testing.T) {
 		t.Fatalf("bob entries = %d (%+v), want 1 merged", len(got), got)
 	}
 	p := got[0]
-	if p.Phone != "+15550000009" || p.Username != "@bobr" {
+	if !containsString(p.Phones, "+15550000009") || !containsString(p.Usernames, "@bobr") {
 		t.Errorf("merged person = %+v, want contact phone and participant handle", p)
 	}
 	if len(p.Chats) != 2 {
@@ -125,5 +125,82 @@ func TestRecencyBreaksTies(t *testing.T) {
 	got := Build(chats, nil).Search("sam", 10)
 	if len(got) != 2 || got[0].Name != "Sam New" {
 		t.Fatalf("recency order = %+v, want Sam New first", got)
+	}
+}
+
+func twoNetworkChats(name string) []api.Chat {
+	return []api.Chat{
+		{ID: "c-1", AccountID: "wa", Network: "WhatsApp", Title: name, Type: "single", LastActive: base},
+		{ID: "c-2", AccountID: "ig", Network: "Instagram", Title: name, Type: "single", LastActive: base.Add(-time.Hour)},
+	}
+}
+
+func TestRareNameMergesAcrossNetworks(t *testing.T) {
+	got := Build(twoNetworkChats("Zelda Fitzwilliam"), nil).All()
+	if len(got) != 1 {
+		t.Fatalf("people = %d (%+v), want 1 merged", len(got), got)
+	}
+	networks := got[0].Networks()
+	if len(networks) != 2 {
+		t.Errorf("networks = %v, want both", networks)
+	}
+	if len(got[0].Chats) != 2 {
+		t.Errorf("chats = %+v, want both", got[0].Chats)
+	}
+}
+
+func TestCommonNameWaitsForApproval(t *testing.T) {
+	chats := twoNetworkChats("John Smith")
+	policy := &MergePolicy{approved: map[string]bool{}, denied: map[string]bool{}}
+	if got := BuildWithPolicy(chats, nil, policy).All(); len(got) != 2 {
+		t.Fatalf("unapproved people = %d, want 2 separate", len(got))
+	}
+	if len(policy.pending) != 1 || policy.pending["john smith"] == nil {
+		t.Fatalf("pending = %+v, want john smith recorded", policy.pending)
+	}
+
+	policy.approved["john smith"] = true
+	if got := BuildWithPolicy(chats, nil, policy).All(); len(got) != 1 {
+		t.Fatalf("approved people = %d, want 1 merged", len(got))
+	}
+
+	denied := &MergePolicy{approved: map[string]bool{}, denied: map[string]bool{"john smith": true}}
+	if got := BuildWithPolicy(chats, nil, denied).All(); len(got) != 2 {
+		t.Fatalf("denied people = %d, want 2 separate", len(got))
+	}
+	if len(denied.pending) != 0 {
+		t.Errorf("denied pending = %+v, want none", denied.pending)
+	}
+}
+
+func TestSingleWordNameNeverCrossMerges(t *testing.T) {
+	if got := Build(twoNetworkChats("Zorblatt"), nil).All(); len(got) != 2 {
+		t.Fatalf("people = %d, want 2: single-word names never merge on name alone", len(got))
+	}
+}
+
+func TestPhoneMergesAcrossNetworks(t *testing.T) {
+	contacts := []api.Contact{
+		{AccountID: "wa", UserID: "u1", FullName: "Dee Kay", PhoneNumber: "+1 (555) 000-1111"},
+		{AccountID: "sg", UserID: "u2", FullName: "dee kay", PhoneNumber: "15550001111"},
+	}
+	got := Build(nil, contacts).All()
+	if len(got) != 1 {
+		t.Fatalf("people = %d (%+v), want 1 merged by phone digits", len(got), got)
+	}
+}
+
+func TestCandidatesSplitStitchedQuery(t *testing.T) {
+	chats := []api.Chat{
+		{ID: "c-j", AccountID: "wa", Title: "Jason Bono", Type: "single", LastActive: base},
+		{ID: "c-a", AccountID: "ig", Title: "Alan Tan", Type: "single", LastActive: base},
+	}
+	ix := Build(chats, nil)
+	if got := ix.Search("Jason Bono Alan Tan", 5); len(got) != 0 {
+		t.Fatalf("Search on stitched query = %+v, want none", got)
+	}
+	got := ix.Candidates("Jason Bono Alan Tan")
+	if len(got) != 2 {
+		t.Fatalf("candidates = %+v, want both people", got)
 	}
 }

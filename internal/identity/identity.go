@@ -23,17 +23,34 @@ type ChatRef struct {
 	Title string
 }
 
-// Person is one resolvable identity and the chats it appears in.
+// AccountRef locates one person on one account.
+type AccountRef struct {
+	AccountID string
+	UserID    string
+	Network   string
+}
+
+// Person is one resolvable human, possibly spanning several accounts.
 type Person struct {
-	AccountID  string
-	UserID     string
 	Name       string
-	Username   string
-	Phone      string
-	Email      string
-	Network    string
+	AltNames   []string
+	Usernames  []string
+	Phones     []string
+	Emails     []string
+	Accounts   []AccountRef
 	Chats      []ChatRef
 	LastActive time.Time
+}
+
+// Networks lists the networks the person appears on, in account order.
+func (p Person) Networks() []string {
+	var out []string
+	for _, a := range p.Accounts {
+		if a.Network != "" && !containsString(out, a.Network) {
+			out = append(out, a.Network)
+		}
+	}
+	return out
 }
 
 // Index holds identities gathered from chat titles, chat participants, and
@@ -42,13 +59,26 @@ type Index struct {
 	people []*Person
 }
 
-// Build gathers identities from chats and contacts into one index. Entries
-// that describe the same person on the same account are merged, keyed by user
-// ID when known and by normalized name otherwise.
+// Build gathers identities from chats and contacts into one index with a
+// nil merge policy. See BuildWithPolicy for the merge rules.
 func Build(chats []api.Chat, contacts []api.Contact) *Index {
+	return BuildWithPolicy(chats, contacts, nil)
+}
+
+// BuildWithPolicy gathers identities and merges entries that describe the
+// same human. Strong keys merge unconditionally: same account and user ID,
+// same phone digits, same email. A shared full name merges within one
+// account always, and across accounts only when the policy allows it: the
+// name needs two or more words, and common names wait for user approval.
+func BuildWithPolicy(chats []api.Chat, contacts []api.Contact, policy *MergePolicy) *Index {
 	b := &builder{
-		byUser: map[string]*Person{},
-		byName: map[string]*Person{},
+		byAccount:  map[string]*Person{},
+		byAcctName: map[string]*Person{},
+		byName:     map[string]*Person{},
+		byPhone:    map[string]*Person{},
+		byEmail:    map[string]*Person{},
+		parent:     map[*Person]*Person{},
+		policy:     policy,
 	}
 	networks := map[string]string{}
 	for _, c := range chats {
@@ -58,86 +88,234 @@ func Build(chats []api.Chat, contacts []api.Contact) *Index {
 			if p.IsSelf || p.IsBot || (p.FullName == "" && p.Username == "") {
 				continue
 			}
-			b.add(&Person{
-				AccountID: c.AccountID,
-				UserID:    p.UserID,
-				Name:      p.FullName,
-				Username:  p.Username,
-				Network:   c.Network,
-			}, ref, c.LastActive)
+			b.add(AccountRef{c.AccountID, p.UserID, c.Network}, p.FullName, p.Username, "", "", ref, c.LastActive)
 		}
 		if c.Type == "single" && c.Title != "" {
-			b.add(&Person{
-				AccountID: c.AccountID,
-				Name:      c.Title,
-				Network:   c.Network,
-			}, ref, c.LastActive)
+			b.add(AccountRef{c.AccountID, "", c.Network}, c.Title, "", "", "", ref, c.LastActive)
 		}
 	}
 	for _, ct := range contacts {
-		b.add(&Person{
-			AccountID: ct.AccountID,
-			UserID:    ct.UserID,
-			Name:      ct.FullName,
-			Username:  ct.Username,
-			Phone:     ct.PhoneNumber,
-			Email:     ct.Email,
-			Network:   networks[ct.AccountID],
-		}, ChatRef{}, time.Time{})
+		b.add(AccountRef{ct.AccountID, ct.UserID, networks[ct.AccountID]},
+			ct.FullName, ct.Username, ct.PhoneNumber, ct.Email, ChatRef{}, time.Time{})
 	}
-	return &Index{people: b.people}
+	var people []*Person
+	for _, p := range b.people {
+		if b.parent[p] == nil {
+			people = append(people, p)
+		}
+	}
+	return &Index{people: people}
 }
 
 type builder struct {
-	people []*Person
-	byUser map[string]*Person
-	byName map[string]*Person
+	people     []*Person
+	byAccount  map[string]*Person // accountID \x00 userID
+	byAcctName map[string]*Person // accountID \x00 normalized name
+	byName     map[string]*Person // normalized name, any account
+	byPhone    map[string]*Person // digits only
+	byEmail    map[string]*Person // lowercased
+	parent     map[*Person]*Person
+	policy     *MergePolicy
 }
 
-// add merges p into the index, preferring an existing entry with the same
-// user ID, then one with the same normalized name on the same account.
-func (b *builder) add(p *Person, ref ChatRef, active time.Time) {
-	userKey := ""
-	if p.UserID != "" {
-		userKey = p.AccountID + "\x00" + p.UserID
+// find follows merge links to the surviving person.
+func (b *builder) find(p *Person) *Person {
+	for p != nil && b.parent[p] != nil {
+		p = b.parent[p]
 	}
-	nameKey := ""
-	if p.Name != "" {
-		nameKey = p.AccountID + "\x00" + Normalize(p.Name)
+	return p
+}
+
+// add merges one observed entry into the index under the merge rules.
+func (b *builder) add(acct AccountRef, name, username, phone, email string, ref ChatRef, active time.Time) {
+	accountKey := ""
+	if acct.UserID != "" {
+		accountKey = acct.AccountID + "\x00" + acct.UserID
 	}
-	dst := b.byUser[userKey]
-	if dst == nil && nameKey != "" {
-		dst = b.byName[nameKey]
+	acctNameKey, nameKey := "", ""
+	if n := Normalize(name); n != "" {
+		acctNameKey = acct.AccountID + "\x00" + n
+		nameKey = n
 	}
+	phoneKey := digitsOnly(phone)
+	emailKey := strings.ToLower(strings.TrimSpace(email))
+
+	var dst *Person
+	var extra []*Person
+	consider := func(p *Person) {
+		p = b.find(p)
+		if p == nil {
+			return
+		}
+		if dst == nil {
+			dst = p
+		} else if p != dst && !containsPerson(extra, p) {
+			extra = append(extra, p)
+		}
+	}
+	consider(b.byAccount[accountKey])
+	consider(b.byAcctName[acctNameKey])
+	consider(b.byPhone[phoneKey])
+	consider(b.byEmail[emailKey])
+	if p := b.find(b.byName[nameKey]); p != nil && p != dst && !containsPerson(extra, p) {
+		// A cross-account name match is the one weak key: gate it.
+		if b.policy.allowNameMerge(name, append(p.Networks(), acct.Network)) {
+			consider(p)
+		}
+	}
+
 	if dst == nil {
-		dst = p
+		dst = &Person{Name: name, LastActive: time.Time{}}
 		b.people = append(b.people, dst)
-	} else {
-		fillIfEmpty(&dst.UserID, p.UserID)
-		fillIfEmpty(&dst.Name, p.Name)
-		fillIfEmpty(&dst.Username, p.Username)
-		fillIfEmpty(&dst.Phone, p.Phone)
-		fillIfEmpty(&dst.Email, p.Email)
-		fillIfEmpty(&dst.Network, p.Network)
 	}
+	for _, p := range extra {
+		b.absorb(dst, p)
+		b.parent[p] = dst
+	}
+	b.absorbFields(dst, name, username, phone, email, acct)
 	if ref.ID != "" && !hasChat(dst.Chats, ref.ID) {
 		dst.Chats = append(dst.Chats, ref)
 	}
 	if active.After(dst.LastActive) {
 		dst.LastActive = active
 	}
-	if userKey != "" {
-		b.byUser[userKey] = dst
+
+	for key, m := range map[string]map[string]*Person{
+		accountKey:  b.byAccount,
+		acctNameKey: b.byAcctName,
+		phoneKey:    b.byPhone,
+		emailKey:    b.byEmail,
+	} {
+		if key != "" {
+			m[key] = dst
+		}
 	}
-	if nameKey != "" {
+	if nameKey != "" && b.byName[nameKey] == nil {
 		b.byName[nameKey] = dst
 	}
 }
 
-func fillIfEmpty(dst *string, v string) {
-	if *dst == "" {
-		*dst = v
+// absorb folds src's identity into dst after a merge.
+func (b *builder) absorb(dst, src *Person) {
+	b.absorbFields(dst, src.Name, "", "", "", AccountRef{})
+	for _, n := range src.AltNames {
+		b.absorbFields(dst, n, "", "", "", AccountRef{})
 	}
+	dst.Usernames = appendUnique(dst.Usernames, src.Usernames...)
+	dst.Phones = appendUnique(dst.Phones, src.Phones...)
+	dst.Emails = appendUnique(dst.Emails, src.Emails...)
+	for _, a := range src.Accounts {
+		addAccount(dst, a)
+	}
+	for _, ref := range src.Chats {
+		if !hasChat(dst.Chats, ref.ID) {
+			dst.Chats = append(dst.Chats, ref)
+		}
+	}
+	if src.LastActive.After(dst.LastActive) {
+		dst.LastActive = src.LastActive
+	}
+}
+
+// absorbFields folds one observation's fields into dst.
+func (b *builder) absorbFields(dst *Person, name, username, phone, email string, acct AccountRef) {
+	switch {
+	case dst.Name == "":
+		dst.Name = name
+	case name != "" && Normalize(name) != Normalize(dst.Name) && !containsNormalized(dst.AltNames, name):
+		dst.AltNames = append(dst.AltNames, name)
+	}
+	if username != "" {
+		dst.Usernames = appendUnique(dst.Usernames, username)
+	}
+	if phone != "" {
+		dst.Phones = appendUnique(dst.Phones, phone)
+	}
+	if email != "" {
+		dst.Emails = appendUnique(dst.Emails, email)
+	}
+	if acct.AccountID != "" {
+		addAccount(dst, acct)
+	}
+}
+
+// addAccount records acct on dst, upgrading a userless entry from the same
+// account instead of duplicating it.
+func addAccount(dst *Person, acct AccountRef) {
+	for i, a := range dst.Accounts {
+		if a.AccountID != acct.AccountID {
+			continue
+		}
+		if a.UserID == acct.UserID {
+			return
+		}
+		if a.UserID == "" {
+			dst.Accounts[i].UserID = acct.UserID
+			return
+		}
+		if acct.UserID == "" {
+			return
+		}
+	}
+	dst.Accounts = append(dst.Accounts, acct)
+}
+
+func appendUnique(dst []string, values ...string) []string {
+	for _, v := range values {
+		if v == "" {
+			continue
+		}
+		found := false
+		for _, have := range dst {
+			if strings.EqualFold(have, v) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			dst = append(dst, v)
+		}
+	}
+	return dst
+}
+
+func containsNormalized(list []string, v string) bool {
+	n := Normalize(v)
+	for _, have := range list {
+		if Normalize(have) == n {
+			return true
+		}
+	}
+	return false
+}
+
+func containsString(list []string, v string) bool {
+	for _, have := range list {
+		if have == v {
+			return true
+		}
+	}
+	return false
+}
+
+func containsPerson(list []*Person, p *Person) bool {
+	for _, have := range list {
+		if have == p {
+			return true
+		}
+	}
+	return false
+}
+
+// digitsOnly reduces a phone number to its digits for matching.
+func digitsOnly(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func hasChat(refs []ChatRef, id string) bool {
@@ -174,7 +352,7 @@ func (ix *Index) Search(query string, max int) []Person {
 	var hits []scored
 	for _, p := range ix.people {
 		tier, dist := tierNone, 0
-		for _, field := range []string{p.Name, p.Username, p.Phone, p.Email} {
+		for _, field := range p.matchFields() {
 			t, d := matchField(q, Normalize(field))
 			if t < tier || (t == tier && d < dist) {
 				tier, dist = t, d
@@ -201,6 +379,45 @@ func (ix *Index) Search(query string, max int) []Person {
 		out = append(out, *h.p)
 	}
 	return out
+}
+
+// matchFields lists every string a search query may hit.
+func (p *Person) matchFields() []string {
+	fields := []string{p.Name}
+	fields = append(fields, p.AltNames...)
+	fields = append(fields, p.Usernames...)
+	fields = append(fields, p.Phones...)
+	fields = append(fields, p.Emails...)
+	return fields
+}
+
+// Candidates returns people whose full name appears as a word-bounded span
+// of query. It rescues queries that stitch several names together, where
+// Search finds nothing because no single person matches every word.
+func (ix *Index) Candidates(query string) []Person {
+	q := " " + strippedWords(query) + " "
+	var out []Person
+	for _, p := range ix.people {
+		for _, name := range append([]string{p.Name}, p.AltNames...) {
+			n := strippedWords(name)
+			if n != "" && strings.Contains(q, " "+n+" ") {
+				out = append(out, *p)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// strippedWords normalizes s and reduces punctuation to single spaces.
+func strippedWords(s string) string {
+	mapped := strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return r
+		}
+		return ' '
+	}, Normalize(s))
+	return strings.Join(strings.Fields(mapped), " ")
 }
 
 // All returns every person in the index.

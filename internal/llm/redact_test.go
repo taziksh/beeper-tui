@@ -14,10 +14,10 @@ import (
 
 func testVault() *redact.Vault {
 	return redact.NewVault([]identity.Person{{
-		Name:     "Dana Kim",
-		Username: "@dana",
-		Phone:    "+15551234567",
-		Email:    "dana@example.com",
+		Name:      "Dana Kim",
+		Usernames: []string{"@dana"},
+		Phones:    []string{"+15551234567"},
+		Emails:    []string{"dana@example.com"},
 	}})
 }
 

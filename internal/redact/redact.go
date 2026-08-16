@@ -61,19 +61,23 @@ func NewVault(people []identity.Person) *Vault {
 	}
 	for _, p := range people {
 		token := v.mint(p.Name)
-		v.register(p.Name, token)
-		// The possessive keeps its suffix on the token, so "Dana's plan"
-		// reads "CONTACT_N's plan" and grammar survives redaction.
-		v.register(p.Name+"'s", token+"'s")
-		for _, part := range strings.Fields(p.Name) {
-			if len(part) >= 3 {
-				v.register(part, token)
-				v.register(part+"'s", token+"'s")
+		for _, name := range append([]string{p.Name}, p.AltNames...) {
+			v.register(name, token)
+			// The possessive keeps its suffix on the token, so "Dana's plan"
+			// reads "CONTACT_N's plan" and grammar survives redaction.
+			v.register(name+"'s", token+"'s")
+			for _, part := range strings.Fields(name) {
+				if len(part) >= 3 {
+					v.register(part, token)
+					v.register(part+"'s", token+"'s")
+				}
 			}
 		}
-		v.register(p.Username, token)
-		v.register(p.Phone, token)
-		v.register(p.Email, token)
+		for _, list := range [][]string{p.Usernames, p.Phones, p.Emails} {
+			for _, value := range list {
+				v.register(value, token)
+			}
+		}
 	}
 	sort.SliceStable(v.replacer, func(i, j int) bool {
 		return len(v.replacer[i].value) > len(v.replacer[j].value)

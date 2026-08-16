@@ -9,7 +9,7 @@ import (
 
 func testVault() *Vault {
 	return NewVault([]identity.Person{
-		{Name: "Dana Fixture", Username: "@dana", Phone: "+15550000002", Email: "dana@example.test"},
+		{Name: "Dana Fixture", Usernames: []string{"@dana"}, Phones: []string{"+15550000002"}, Emails: []string{"dana@example.test"}},
 		{Name: "Bob Ramírez"},
 	})
 }
