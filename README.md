@@ -80,6 +80,27 @@ To override the API base URL (rare):
 export BEEPER_API_BASE_URL=http://localhost:23373
 ```
 
+### Assistant model
+
+The chat tab talks to a local model server by default: LM Studio on `localhost:1234`, or Ollama via `BEEPER_LLM_BASE_URL=http://127.0.0.1:11434/v1`.
+
+For stronger answers, switch to [Tinfoil](https://tinfoil.sh) confidential inference:
+
+```bash
+export BEEPER_LLM_PROVIDER=tinfoil
+export TINFOIL_API_KEY=<key>
+```
+
+Prompts then leave the machine only to an attested enclave the client verifies before sending anything, so the operator cannot read them. On both providers, known contact names, handles, phones, and emails are replaced by opaque session tokens before any model call and restored only for display. Enclave verification fetches attestation metadata from GitHub and Sigstore; no message data is involved.
+
+| Variable | Meaning |
+| --- | --- |
+| `BEEPER_LLM_PROVIDER` | `local` (default) or `tinfoil` |
+| `BEEPER_LLM_BASE_URL` | Local server endpoint (default LM Studio's) |
+| `BEEPER_LLM_MODEL` | Model id. Autodetected locally; `kimi-k3` on Tinfoil |
+| `TINFOIL_API_KEY` | Required by the tinfoil provider |
+| `BEEPER_TUI_ALLOW_REMOTE` | `1` allows any other remote endpoint |
+
 ## Keybindings
 
 ### Chat list
@@ -124,8 +145,10 @@ export BEEPER_API_BASE_URL=http://localhost:23373
 - [x] Live inbox via WebSocket events
 - [ ] Search across chats and messages
 - [ ] Attachments, reactions, replies-to-message, threads, edits, deletes
-- [ ] Chat tab: assistant on a local model over chats and messages
-  - [ ] Read-only Q&A
+- [ ] Chat tab: assistant over chats and messages
+  - [x] Read-only Q&A
+  - [x] Identity redaction: session tokens in every model call
+  - [x] Tinfoil confidential-inference provider
   - [ ] Send messages
 
 Design specs live in [docs/superpowers/specs](docs/superpowers/specs).
