@@ -32,8 +32,8 @@ As of June 2026, iMessage is the only bridge that emits no events, so iMessage c
 
 ## Run From Source
 
-During development, prefer `make run`; it always executes the current checkout
-instead of an older installed binary.
+`make run` builds `./beeper-tui` and execs it — the same binary the PATH
+launcher uses after `make install`.
 
 ```bash
 make run

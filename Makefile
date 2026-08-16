@@ -5,8 +5,10 @@ BINDIR  ?= $(PREFIX)/bin
 REPO    := $(CURDIR)
 WRAPPER := scripts/beeper-tui-wrapper.sh
 
-run:
-	@set -a; [ -f .env ] && . ./.env; set +a; go run ./cmd/beeper-tui
+# Same artifact as the PATH launcher (`./beeper-tui`). `go run` would compile
+# into the Go cache and leave PATH pointed at a different, older binary.
+run: build
+	@set -a; [ -f .env ] && . ./.env; set +a; ./beeper-tui
 
 # Fake API server with synthetic data. Point the TUI at it with
 # BEEPER_API_BASE_URL=http://127.0.0.1:23374 BEEPER_ACCESS_TOKEN=stub
