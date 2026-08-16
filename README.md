@@ -95,6 +95,8 @@ Or put those lines in `.env` at the repo root, without `export`. It is gitignore
 
 Prompts then leave the machine only to an attested enclave the client verifies before sending anything, so the operator cannot read them. On both providers, known contact names, handles, phones, and emails are replaced by opaque session tokens before any model call and restored only for display. Enclave verification fetches attestation metadata from GitHub and Sigstore; no message data is involved.
 
+The same person on several networks is treated as one person: entries merge on matching phone, email, or a shared multi-word name. Common names wait for your call in `identity-merges.yaml` next to your person cards; move a pending name to `approved` or `denied`.
+
 | Variable | Meaning |
 | --- | --- |
 | `BEEPER_LLM_PROVIDER` | `local` (default) or `tinfoil` |
