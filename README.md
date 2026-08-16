@@ -39,12 +39,31 @@ instead of an older installed binary.
 make run
 ```
 
-To refresh the installed `beeper-tui` command:
+## Install (system-wide command)
+
+Install a `beeper-tui` launcher onto your PATH (`~/.local/bin` by default). The
+launcher rebuilds from this checkout whenever source is newer than the binary,
+so the command does not go stale after you pull or edit:
 
 ```bash
 make install
 ```
 
+Then run it from anywhere:
+
+```bash
+beeper-tui
+```
+
+Optional:
+
+| Target | What it does |
+| --- | --- |
+| `make install` | Auto-rebuild launcher (recommended for daily use) |
+| `make install-bin` | Static copy of the binary only (re-run after changes) |
+| `make uninstall` | Remove `~/.local/bin/beeper-tui` |
+
+Override install location with `PREFIX` / `BINDIR` if you want (`PREFIX=~/.local` by default). Set `BEEPER_TUI_VERBOSE=1` to print rebuilds.
 ## Configuration
 
 The TUI auto-discovers your access token from a locally-running Beeper Desktop.
