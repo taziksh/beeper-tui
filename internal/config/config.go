@@ -40,6 +40,38 @@ func BaseURL() string {
 	return defaultBaseURL
 }
 
+// Providers the assistant can talk to. Local is an LM Studio or Ollama
+// server on this machine. Tinfoil is confidential inference in an attested
+// enclave; see checkEgress for how it interacts with the egress guard.
+const (
+	ProviderLocal   = "local"
+	ProviderTinfoil = "tinfoil"
+)
+
+// TinfoilEnclave is the attested enclave host the tinfoil provider pins to.
+const TinfoilEnclave = "inference.tinfoil.sh"
+
+const tinfoilLLMBaseURL = "https://" + TinfoilEnclave + "/v1"
+
+// defaultTinfoilModel is the strongest agentic tool-use model in the
+// Tinfoil catalog as of August 2026.
+const defaultTinfoilModel = "kimi-k3"
+
+// LLMProvider reads BEEPER_LLM_PROVIDER. Empty means local. The Tinfoil
+// API key alone never selects a provider: keys are commonly exported
+// machine-wide, and switching on one would silently send data remote.
+func LLMProvider() string {
+	v := strings.TrimSpace(os.Getenv("BEEPER_LLM_PROVIDER"))
+	if v == "" {
+		return ProviderLocal
+	}
+	return v
+}
+
+func TinfoilAPIKey() string {
+	return strings.TrimSpace(os.Getenv("TINFOIL_API_KEY"))
+}
+
 const defaultLLMBaseURL = "http://127.0.0.1:1234/v1"
 
 // LLMBaseURL is the OpenAI-compatible endpoint the chat tab talks to. The
@@ -58,12 +90,14 @@ func LLMModel() string {
 }
 
 type Config struct {
-	Token      string
-	BaseURL    string
-	ConfigDir  string
-	CacheDir   string
-	LLMBaseURL string
-	LLMModel   string
+	Token         string
+	BaseURL       string
+	ConfigDir     string
+	CacheDir      string
+	LLMProvider   string
+	LLMBaseURL    string
+	LLMModel      string
+	TinfoilAPIKey string
 }
 
 func Load() (Config, error) {
@@ -76,12 +110,30 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	cfg := Config{
-		Token:      Token(),
-		BaseURL:    BaseURL(),
-		ConfigDir:  cfgDir,
-		CacheDir:   cacheDir,
-		LLMBaseURL: LLMBaseURL(),
-		LLMModel:   LLMModel(),
+		Token:         Token(),
+		BaseURL:       BaseURL(),
+		ConfigDir:     cfgDir,
+		CacheDir:      cacheDir,
+		LLMProvider:   LLMProvider(),
+		LLMBaseURL:    LLMBaseURL(),
+		LLMModel:      LLMModel(),
+		TinfoilAPIKey: TinfoilAPIKey(),
+	}
+	switch cfg.LLMProvider {
+	case ProviderLocal:
+	case ProviderTinfoil:
+		if cfg.TinfoilAPIKey == "" {
+			return Config{}, fmt.Errorf("config: BEEPER_LLM_PROVIDER=tinfoil requires TINFOIL_API_KEY")
+		}
+		if v := strings.TrimSpace(os.Getenv("BEEPER_LLM_BASE_URL")); v != "" && v != tinfoilLLMBaseURL {
+			return Config{}, fmt.Errorf("config: BEEPER_LLM_BASE_URL=%q conflicts with BEEPER_LLM_PROVIDER=tinfoil", v)
+		}
+		cfg.LLMBaseURL = tinfoilLLMBaseURL
+		if cfg.LLMModel == "" {
+			cfg.LLMModel = defaultTinfoilModel
+		}
+	default:
+		return Config{}, fmt.Errorf("config: unknown BEEPER_LLM_PROVIDER %q", cfg.LLMProvider)
 	}
 	if err := checkEgress(cfg); err != nil {
 		return Config{}, err
@@ -95,16 +147,20 @@ const allowRemoteEnv = "BEEPER_TUI_ALLOW_REMOTE"
 
 // checkEgress enforces that every endpoint the app talks to is local, so
 // messages, names, and contacts cannot leave the device by configuration.
+// The one exemption is the tinfoil provider: Load pins its LLM URL to the
+// attested enclave, and the tinfoil client refuses to send anything unless
+// attestation verifies.
 func checkEgress(cfg Config) error {
 	if os.Getenv(allowRemoteEnv) == "1" {
 		return nil
 	}
-	for _, raw := range []string{cfg.BaseURL, cfg.LLMBaseURL} {
-		if err := checkLocalURL(raw); err != nil {
-			return err
-		}
+	if err := checkLocalURL(cfg.BaseURL); err != nil {
+		return err
 	}
-	return nil
+	if cfg.LLMProvider == ProviderTinfoil {
+		return nil
+	}
+	return checkLocalURL(cfg.LLMBaseURL)
 }
 
 // checkLocalURL reports an error unless raw points at this machine.
