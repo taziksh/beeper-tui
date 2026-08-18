@@ -180,6 +180,21 @@ func TestSearchMessages_UsesQueryAndMapsResults(t *testing.T) {
 	}
 }
 
+func TestSearchMessages_PassesMultiWordQueryThrough(t *testing.T) {
+	var gotQuery string
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query().Get("query")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[],"hasMore":false}`))
+	})
+	if _, err := client.SearchMessages(context.Background(), "Lisa Wang"); err != nil {
+		t.Fatalf("SearchMessages() error = %v", err)
+	}
+	if gotQuery != "Lisa Wang" {
+		t.Errorf("query param = %q, want the full phrase; splitting is the chat tool's job", gotQuery)
+	}
+}
+
 func TestListMessages_MapsReactions(t *testing.T) {
 	const body = `{
   "items": [

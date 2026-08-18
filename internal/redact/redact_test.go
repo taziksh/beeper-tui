@@ -45,6 +45,17 @@ func TestRedactSamePersonSameToken(t *testing.T) {
 	}
 }
 
+func TestRehydrateFirstNameBecomesFullDisplayName(t *testing.T) {
+	v := NewVault([]identity.Person{{Name: "Lisa Wang"}})
+	token := v.Redact("lisa")
+	if !strings.HasPrefix(token, "CONTACT_") {
+		t.Fatalf("redact(lisa) = %q", token)
+	}
+	if got := v.Rehydrate(token); got != "Lisa Wang" {
+		t.Errorf("rehydrate(%q) = %q, want Lisa Wang", token, got)
+	}
+}
+
 func TestRehydrateRoundTrip(t *testing.T) {
 	v := testVault()
 	token := strings.Fields(v.Redact("Dana Fixture"))[0]
