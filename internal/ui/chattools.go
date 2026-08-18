@@ -46,7 +46,7 @@ var chatTools = []llm.Tool{
 	}},
 	{Type: "function", Function: llm.ToolSpec{
 		Name:        "search_messages",
-		Description: "Search message contents across chats. Literal word matching: use single words people actually type, not phrases or concepts. Filters narrow by chat, sender, and date.",
+		Description: "Search message contents across chats. Literal word matching: use single words people actually type, not phrases or concepts. Multi-word queries search each word separately. Filters narrow by chat, sender, and date.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -418,7 +418,7 @@ func toolSearchMessages(ctx context.Context, client *api.Client, args string) (s
 	if p.Query == "" && q.ChatID == "" && q.Sender == "" && q.After.IsZero() && q.Before.IsZero() {
 		return "", step, fmt.Errorf("give a query or at least one filter")
 	}
-	results, err := client.SearchMessagesFiltered(ctx, q)
+	results, err := searchMessages(ctx, client, q)
 	if err != nil {
 		return "", step, err
 	}
@@ -451,6 +451,86 @@ func toolSearchMessages(ctx context.Context, client *api.Client, args string) (s
 	}
 	step.sources = sources
 	return b.String(), step, nil
+}
+
+// searchQueryWords is the set of Beeper queries for one tool call. Beeper
+// ANDs every word, so a vault-rehydrated full name ("lisa" → "Lisa Wang")
+// misses messages that only contain one part. Single-word queries pass
+// through; multi-word queries become one query per token of length >= 3.
+func searchQueryWords(query string) []string {
+	q := strings.TrimSpace(query)
+	if q == "" {
+		return nil
+	}
+	fields := strings.Fields(q)
+	if len(fields) == 1 {
+		return fields
+	}
+	var words []string
+	seen := map[string]bool{}
+	for _, w := range fields {
+		if len(w) < 3 {
+			continue
+		}
+		key := strings.ToLower(w)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		words = append(words, w)
+	}
+	if len(words) == 0 {
+		return []string{q}
+	}
+	return words
+}
+
+// searchMessages runs Beeper search for q, splitting a multi-word Query
+// into separate lookups and merging the hits.
+func searchMessages(ctx context.Context, client *api.Client, q api.SearchQuery) ([]api.MessageSearchResult, error) {
+	words := searchQueryWords(q.Query)
+	if len(words) <= 1 {
+		return client.SearchMessagesFiltered(ctx, q)
+	}
+	var sets [][]api.MessageSearchResult
+	for _, word := range words {
+		part := q
+		part.Query = word
+		hits, err := client.SearchMessagesFiltered(ctx, part)
+		if err != nil {
+			return nil, err
+		}
+		sets = append(sets, hits)
+	}
+	return mergeSearchResults(sets, q.Limit), nil
+}
+
+func mergeSearchResults(sets [][]api.MessageSearchResult, limit int) []api.MessageSearchResult {
+	if limit <= 0 {
+		limit = 20
+	}
+	seen := map[string]bool{}
+	var out []api.MessageSearchResult
+	for _, set := range sets {
+		for _, r := range set {
+			id := r.Message.ID
+			if id == "" {
+				id = r.Message.ChatID + "\x00" + r.Message.Timestamp.String() + "\x00" + r.Message.Text
+			}
+			if seen[id] {
+				continue
+			}
+			seen[id] = true
+			out = append(out, r)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Message.Timestamp.After(out[j].Message.Timestamp)
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out
 }
 
 // toolUnansweredChats lists chats whose last message is from someone else:

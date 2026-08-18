@@ -1,11 +1,85 @@
 package ui
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/taziksh/beeper-tui/internal/api"
+	"github.com/taziksh/beeper-tui/internal/config"
 )
+
+func TestSearchQueryWords(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want []string
+	}{
+		{"lisa", []string{"lisa"}},
+		{"Lisa Wang", []string{"Lisa", "Wang"}},
+		{"  Lisa   Wang  ", []string{"Lisa", "Wang"}},
+		{"Lisa Lisa Wang", []string{"Lisa", "Wang"}},
+		{"", nil},
+		{"  ", nil},
+		{"a b", []string{"a b"}},
+	} {
+		if got := searchQueryWords(tc.in); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("searchQueryWords(%q) = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestMergeSearchResultsDedupesAndCaps(t *testing.T) {
+	newer := time.Date(2026, 8, 18, 13, 29, 0, 0, time.UTC)
+	older := newer.Add(-time.Hour)
+	got := mergeSearchResults([][]api.MessageSearchResult{
+		{{Message: api.Message{ID: "m1", Text: "Hi Lisa", Timestamp: older}}},
+		{
+			{Message: api.Message{ID: "m1", Text: "Hi Lisa", Timestamp: older}},
+			{Message: api.Message{ID: "m2", Text: "Wang?", Timestamp: newer}},
+		},
+	}, 1)
+	if len(got) != 1 || got[0].Message.ID != "m2" {
+		t.Fatalf("got %+v, want newest unique m2", got)
+	}
+}
+
+func TestToolSearchMessages_SplitsFullName(t *testing.T) {
+	var queries []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path != "/v1/messages/search" {
+			_, _ = w.Write([]byte(`{"items":[],"hasMore":false}`))
+			return
+		}
+		q := r.URL.Query().Get("query")
+		queries = append(queries, q)
+		items := `[]`
+		if strings.EqualFold(q, "lisa") {
+			items = `[{"id":"m1","accountID":"acc","chatID":"imsg","senderID":"me","sortKey":"1","text":"Hi Lisa, this is tazik!!","timestamp":"2026-08-18T13:29:00Z","isSender":true,"senderName":"Me"}]`
+		}
+		_, _ = w.Write([]byte(`{"items":` + items + `,"hasMore":false}`))
+	}))
+	t.Cleanup(srv.Close)
+	client := api.New(config.Config{Token: "test", BaseURL: srv.URL})
+
+	text, step, err := toolSearchMessages(context.Background(), client, `{"query":"Lisa Wang"}`)
+	if err != nil {
+		t.Fatalf("toolSearchMessages: %v", err)
+	}
+	if !reflect.DeepEqual(queries, []string{"Lisa", "Wang"}) {
+		t.Errorf("queries = %v, want [Lisa Wang] as separate searches", queries)
+	}
+	if step.result != "1 results" {
+		t.Errorf("result = %q, want 1 results", step.result)
+	}
+	if !strings.Contains(text, "Hi Lisa") {
+		t.Errorf("text = %q, want the Lisa hit", text)
+	}
+}
 
 func TestIsUnanswered(t *testing.T) {
 	base := api.Chat{Type: "single", Preview: "hey", LastSender: "Ada"}
